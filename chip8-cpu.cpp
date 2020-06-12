@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <random>
 #include "chip8-cpu.hpp"
 
 unsigned short getHex(uint16_t opcode, int index, int len=1) {
@@ -27,15 +28,38 @@ Emulator::Emulator() :
         &Emulator::DRW,
         &Emulator::handleE,
         &Emulator::handleF
-    }
+    },
+    start (0x200)
 {
-    // start = 0x200;
-    // pc = start;
+    pc = start;
+
+    const unsigned short FONTSET_SIZE = 80;
+
+    uint8_t fontset[FONTSET_SIZE] = {
+        0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+        0x20, 0x60, 0x20, 0x20, 0x70, // 1
+        0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+        0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+        0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+        0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+        0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+        0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+        0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+        0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+        0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+        0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+        0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+        0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+        0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+        0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+    };
+
+    std::memcpy(memory+0x50, fontset, FONTSET_SIZE);
     
 }
 
 
-void Emulator::load (const char *rom) {
+void Emulator::loadROM (const char *rom) {
     FILE *fptr = NULL;
 
     if ((fptr = fopen(rom, "rb")) == NULL) {
@@ -204,8 +228,9 @@ void Emulator::JPV0 (uint16_t opcode) {
 }
 void Emulator::RND (uint16_t opcode) {
     // Vx = rand & NN
-    V[getHex(opcode, 2)] = ((std::rand() % 255) & getHex(opcode, 0, 2));
+    V[getHex(opcode, 2)] = rng(randEngine) & getHex(opcode, 0, 2);
 }
+
 void Emulator::DRW (uint16_t opcode) {
     // draw
     printf("D, %04X\n", opcode);
@@ -272,7 +297,7 @@ void Emulator::handleF (uint16_t opcode) {
             I += (x+1);
             break;
         case 0x65:
-            // copy memory[I]...memory[I+x] into V0...Vx 
+            // copy memory[I]...memory[I+x] into V0...Vx
             std::memcpy(V, memory+I, x+1);
             I += (x+1);
             break;

@@ -1,4 +1,5 @@
 #include <inttypes.h>
+#include <random>
 
 
 #ifndef EMULATOR_H
@@ -9,11 +10,11 @@ unsigned short getHex(uint16_t opcode, int index, int len);
 class Emulator {
     public:
         Emulator();
-        void load(const char *rom);
+        void loadROM(const char *rom);
         void update();
 
     private:
-        unsigned short start;  // programs loaded into address 0x200
+        const unsigned short start;  // programs loaded into address 0x200
         uint16_t opcode;
         uint8_t V[16];  // general-purpose registers + flag register
         uint8_t memory[4096];
@@ -24,6 +25,10 @@ class Emulator {
         uint16_t stack[16];
         uint8_t sptr;  // current stack frame
         uint8_t gfx[64 * 32];
+
+        std::random_device randDevice;
+        std::mt19937 randEngine{randDevice()};
+        std::uniform_int_distribution<uint8_t> rng{0, 255};
 
         // using Instruction = void(*)(uint16_t opcode);
 
