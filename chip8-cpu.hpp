@@ -25,9 +25,6 @@ class Emulator {
         uint16_t stack[16];
         uint8_t sptr;  // current stack frame
 
-        // static const unsigned short DISP_WIDTH = 64;
-        // static const unsigned short DISP_HEIGHT = 32;
-        
         uint8_t gfx[64*32];
 
         // random number generator
