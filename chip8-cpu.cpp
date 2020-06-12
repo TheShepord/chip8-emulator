@@ -2,8 +2,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
-#include <random>
 #include "chip8-cpu.hpp"
+// #include "SDL.h"
 
 unsigned short getHex(uint16_t opcode, int index, int len=1) {
     // returns hex value between bytes code[i] and code[i+4*len]
@@ -29,9 +29,9 @@ Emulator::Emulator() :
         &Emulator::handleE,
         &Emulator::handleF
     },
-    start (0x200)
+    START (0x200)
 {
-    pc = start;
+    pc = START;
 
     const unsigned short FONTSET_SIZE = 80;
 
@@ -79,12 +79,12 @@ void Emulator::loadROM (const char *rom) {
     int fsize = ftell(fptr);
     rewind(fptr);
 
-    if (fsize > 4096 - start) {
+    if (fsize > 4096 - START) {
         printf("Invalid .ch8 program. Size should be at most %i bytes, but is instead %i bytes.\n",\
-        4096-start, fsize);
+        4096-START, fsize);
         std::exit(1);
     }
-    fread(memory+start, fsize, 1, fptr);
+    fread(memory+START, fsize, 1, fptr);
 
     fclose(fptr);
 
@@ -93,16 +93,24 @@ void Emulator::loadROM (const char *rom) {
 void Emulator::update () {
 
     opcode = (memory[pc] << 8) | memory[pc+1];  // fetch
-    
-    uint16_t hash = getHex(opcode, 3);  // decode
-    
+
     try {
-        (this->*optable[hash])(opcode);   // execute
+        (this->*optable[getHex(opcode, 3)])(opcode);   // decode and execute
+
         // equivalent to std::invoke(optable[hash], this, opcode), but doesn't require <functional>
     }
     catch (int e) {
         printf("Opcode %04X at byte %i\n returned error %i", opcode, pc - 0x200, e);
     }
+
+    if (delayTimer > 0) {
+        --delayTimer;
+    }
+
+    if (soundTimer > 0) {
+        --soundTimer;
+    }
+
     
 }
 
@@ -110,6 +118,7 @@ void Emulator::handle0(uint16_t opcode) {
     switch (opcode) {
         case 0x00E0:
             // clearDisplay();
+            memset(gfx, 0, sizeof(gfx)/sizeof(gfx[0]));
             break;
         case 0x00EE:
             // subroutine return
@@ -173,7 +182,7 @@ void Emulator::ADD_BYTE (uint16_t opcode) {
 }
 void Emulator::handle8 (uint16_t opcode) {
     unsigned short x = getHex(opcode, 2);
-    unsigned short y = getHex(opcode, 2);
+    unsigned short y = getHex(opcode, 1);
     switch (getHex(opcode, 0)) {
         case 0:
             V[x] = V[y];
@@ -208,7 +217,7 @@ void Emulator::handle8 (uint16_t opcode) {
             V[x] = (V[x] << 1);
             break;
         default:
-            printf("Unknown opcode %04X at byte %i\n", opcode, pc - start);
+            printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
             std::exit(1);
     }
     pc += 2;
@@ -244,7 +253,7 @@ void Emulator::handleE (uint16_t opcode) {
             // skip if key != Vx
             break;
         default:
-            printf("Unknown opcode %04X at byte %i\n", opcode, pc - start);
+            printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
             std::exit(1);
     }
 }
@@ -302,7 +311,7 @@ void Emulator::handleF (uint16_t opcode) {
             I += (x+1);
             break;
         default:
-            printf("Unknown opcode %04X at byte %i\n", opcode, pc - start);
+            printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
             std::exit(1);
     }
 }

@@ -5,7 +5,7 @@
 #ifndef EMULATOR_H
 #define EMULATOR_H
 
-unsigned short getHex(uint16_t opcode, int index, int len);
+unsigned short decode(uint16_t opcode, int index, int len);
 
 class Emulator {
     public:
@@ -14,7 +14,7 @@ class Emulator {
         void update();
 
     private:
-        const unsigned short start;  // programs loaded into address 0x200
+        const unsigned short START;
         uint16_t opcode;
         uint8_t V[16];  // general-purpose registers + flag register
         uint8_t memory[4096];
@@ -24,15 +24,18 @@ class Emulator {
         uint8_t delayTimer;
         uint16_t stack[16];
         uint8_t sptr;  // current stack frame
-        uint8_t gfx[64 * 32];
 
+        // static const unsigned short DISP_WIDTH = 64;
+        // static const unsigned short DISP_HEIGHT = 32;
+        
+        uint8_t gfx[64*32];
+
+        // random number generator
         std::random_device randDevice;
         std::mt19937 randEngine{randDevice()};
         std::uniform_int_distribution<uint8_t> rng{0, 255};
 
-        // using Instruction = void(*)(uint16_t opcode);
-
-        // optable
+        // table of opcodes
         void (Emulator::*optable[16]) (uint16_t opcode);
 
         void handle0(uint16_t opcode);
