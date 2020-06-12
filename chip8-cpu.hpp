@@ -17,16 +17,19 @@ class Emulator {
         uint16_t opcode;
         uint8_t V[16];  // general-purpose registers + flag register
         uint8_t memory[4096];
-        unsigned short I;  // index register
-        unsigned short pc;  // program counter
+        uint16_t I;  // index register
+        uint16_t pc;  // program counter
         uint8_t soundTimer;
         uint8_t delayTimer;
         uint16_t stack[16];
         uint8_t sptr;  // current stack frame
         uint8_t gfx[64 * 32];
 
-
         // using Instruction = void(*)(uint16_t opcode);
+
+        // optable
+        void (Emulator::*optable[16]) (uint16_t opcode);
+
         void handle0(uint16_t opcode);
         void JMP (uint16_t opcode);
         void CALL (uint16_t opcode);
@@ -44,8 +47,5 @@ class Emulator {
         void handleE (uint16_t opcode);
         void handleF (uint16_t opcode);
 };
-
-
-// typedef void (Emulator::*Instruction)(uint16_t opcode);
 
 #endif
