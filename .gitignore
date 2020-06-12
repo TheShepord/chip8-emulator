@@ -1,4 +1,5 @@
 .vscode
+chip8-emu
 
 # Prerequisites
 *.d
