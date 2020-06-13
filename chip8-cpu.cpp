@@ -3,9 +3,9 @@
 #include <cstring>
 #include <cmath>
 #include "chip8-cpu.hpp"
-// #include "SDL.h"
+#include <SDL2/SDL.h>
 
-unsigned short getHex(uint16_t opcode, int index, int len=1) {
+unsigned short decode(uint16_t opcode, int index, int len=1) {
     // returns hex value between bytes code[i] and code[i+4*len]
     return (opcode >> (4*index)) & ((int) (std::pow(0x10, len) - 1));
 }
@@ -95,9 +95,9 @@ void Emulator::update () {
     opcode = (memory[pc] << 8) | memory[pc+1];  // fetch
 
     try {
-        (this->*optable[getHex(opcode, 3)])(opcode);   // decode and execute
+        (this->*optable[decode(opcode, 3)])(opcode);   // decode and execute
 
-        // equivalent to std::invoke(optable[hash], this, opcode), but doesn't require <functional>
+        // equivalent to std::invoke(optable[decode(opcode, 3)], this, opcode), but doesn't require <functional>
     }
     catch (int e) {
         printf("Opcode %04X at byte %i\n returned error %i", opcode, pc - 0x200, e);
@@ -132,17 +132,17 @@ void Emulator::handle0(uint16_t opcode) {
 }
 void Emulator::JMP (uint16_t opcode) {
     // jump to NNN
-    pc = getHex(opcode, 0, 3);
+    pc = decode(opcode, 0, 3);
 }
 void Emulator::CALL (uint16_t opcode) {
     // jump to subroutine at NNN
     stack[sptr] = pc;
     ++sptr;
-    pc = getHex(opcode, 0, 3);
+    pc = decode(opcode, 0, 3);
 }
 void Emulator::SEQ_BYTE (uint16_t opcode) {
     // skip Vx == NN
-    if (V[getHex(opcode, 2)] == getHex(opcode, 0, 2)) {
+    if (V[decode(opcode, 2)] == decode(opcode, 0, 2)) {
         pc += 4;
     }
     else {
@@ -151,7 +151,7 @@ void Emulator::SEQ_BYTE (uint16_t opcode) {
 }
 void Emulator::SNE_BYTE (uint16_t opcode) {
     // skip Vx != NN
-    if (V[getHex(opcode, 2)] != getHex(opcode, 0, 2)) {
+    if (V[decode(opcode, 2)] != decode(opcode, 0, 2)) {
         pc += 4;
     }
     else {
@@ -160,7 +160,7 @@ void Emulator::SNE_BYTE (uint16_t opcode) {
 }
 void Emulator::SEQ (uint16_t opcode) {
     // skip Vx == Vy
-    if (V[getHex(opcode, 2)] == V[getHex(opcode, 1)]) {
+    if (V[decode(opcode, 2)] == V[decode(opcode, 1)]) {
         pc += 4;
     }
     else {
@@ -169,21 +169,21 @@ void Emulator::SEQ (uint16_t opcode) {
 }
 void Emulator::LD (uint16_t opcode) {
     // Vx = NN
-    V[getHex(opcode, 2)] = getHex(opcode, 0, 2);
+    V[decode(opcode, 2)] = decode(opcode, 0, 2);
     pc += 2;
 }
 void Emulator::ADD_BYTE (uint16_t opcode) {
     // Vx += NN if not carry flag (i.e. if x != F)
-    unsigned short x = getHex(opcode, 2);
+    unsigned short x = decode(opcode, 2);
     if (x != 0xF) {
-        V[x] += getHex(opcode, 0, 2);
+        V[x] += decode(opcode, 0, 2);
     }
     pc += 2;
 }
 void Emulator::handle8 (uint16_t opcode) {
-    unsigned short x = getHex(opcode, 2);
-    unsigned short y = getHex(opcode, 1);
-    switch (getHex(opcode, 0)) {
+    unsigned short x = decode(opcode, 2);
+    unsigned short y = decode(opcode, 1);
+    switch (decode(opcode, 0)) {
         case 0:
             V[x] = V[y];
             break;
@@ -224,20 +224,20 @@ void Emulator::handle8 (uint16_t opcode) {
 }
 void Emulator::SNE (uint16_t opcode) {
     // skip Vx != Vy
-    pc += ((V[getHex(opcode, 2)] != V[getHex(opcode, 1)]) ? 4 : 2);
+    pc += ((V[decode(opcode, 2)] != V[decode(opcode, 1)]) ? 4 : 2);
 }
 void Emulator::LDI (uint16_t opcode) {
     // I = NNN
-    I = getHex(opcode, 0, 3);
+    I = decode(opcode, 0, 3);
     pc += 2;
 }
 void Emulator::JPV0 (uint16_t opcode) {
     // jump to V0 + NNN
-    pc = V[0]+getHex(opcode, 0, 3);
+    pc = V[0]+decode(opcode, 0, 3);
 }
 void Emulator::RND (uint16_t opcode) {
     // Vx = rand & NN
-    V[getHex(opcode, 2)] = rng(randEngine) & getHex(opcode, 0, 2);
+    V[decode(opcode, 2)] = rng(randEngine) & decode(opcode, 0, 2);
 }
 
 void Emulator::DRW (uint16_t opcode) {
@@ -245,7 +245,7 @@ void Emulator::DRW (uint16_t opcode) {
     printf("D, %04X\n", opcode);
 }
 void Emulator::handleE (uint16_t opcode) {
-    switch (getHex(opcode, 0, 2)) {
+    switch (decode(opcode, 0, 2)) {
         case 0x9E:
             // skip if key == Vx
             break;
@@ -258,9 +258,9 @@ void Emulator::handleE (uint16_t opcode) {
     }
 }
 void Emulator::handleF (uint16_t opcode) {
-    unsigned short x = getHex(opcode,2);
+    unsigned short x = decode(opcode,2);
 
-    switch (getHex(opcode, 0, 2)) {
+    switch (decode(opcode, 0, 2)) {
         case 0x07:
             V[x] = delayTimer;
             break;

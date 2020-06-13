@@ -3,6 +3,10 @@
 #include <inttypes.h>
 #include "chip8-cpu.hpp"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 int main (int argc, const char *argv[]) {
     Emulator chip8;
 
