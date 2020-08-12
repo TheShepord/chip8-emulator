@@ -32,7 +32,7 @@ class Emulator {
         std::mt19937 randEngine{randDevice()};
         std::uniform_int_distribution<uint8_t> rng{0, 255};
 
-        // table of opcodes
+        // table of opcode functions
         void (Emulator::*optable[16]) (uint16_t opcode);
 
         void handle0(uint16_t opcode);

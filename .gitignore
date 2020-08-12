@@ -1,5 +1,9 @@
 .vscode
-chip8-emu
+
+# CMake
+CMakeCache.txt
+cmake_install.cmake
+CMakeFiles
 
 # Prerequisites
 *.d

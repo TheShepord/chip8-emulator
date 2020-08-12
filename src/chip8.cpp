@@ -2,12 +2,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
-#include "chip8-cpu.hpp"
+#include "chip8.hpp"
 #include <SDL2/SDL.h>
 
-unsigned short decode(uint16_t opcode, int index, int len=1) {
-    // returns hex value between bytes code[i] and code[i+4*len]
-    return (opcode >> (4*index)) & ((int) (std::pow(0x10, len) - 1));
+#define DEBUG
+
+uint16_t decode(uint16_t instruction, int index, int len=1) {
+    // returns hex value between bytes instruction[i] and instruction[i+4*len]
+    return (instruction >> (4*index)) & ((int) (std::pow(0x10, len) - 1));
 }
 
 Emulator::Emulator() :
@@ -95,6 +97,7 @@ void Emulator::update () {
     opcode = (memory[pc] << 8) | memory[pc+1];  // fetch
 
     try {
+        printf("%04X:%i\n", decode(opcode,3), pc);
         (this->*optable[decode(opcode, 3)])(opcode);   // decode and execute
 
         // equivalent to std::invoke(optable[decode(opcode, 3)], this, opcode), but doesn't require <functional>
@@ -119,6 +122,7 @@ void Emulator::handle0(uint16_t opcode) {
         case 0x00E0:
             // clearDisplay();
             memset(gfx, 0, sizeof(gfx)/sizeof(gfx[0]));
+            pc += 2;
             break;
         case 0x00EE:
             // subroutine return
@@ -174,15 +178,15 @@ void Emulator::LD (uint16_t opcode) {
 }
 void Emulator::ADD_BYTE (uint16_t opcode) {
     // Vx += NN if not carry flag (i.e. if x != F)
-    unsigned short x = decode(opcode, 2);
+    uint16_t x = decode(opcode, 2);
     if (x != 0xF) {
         V[x] += decode(opcode, 0, 2);
     }
     pc += 2;
 }
 void Emulator::handle8 (uint16_t opcode) {
-    unsigned short x = decode(opcode, 2);
-    unsigned short y = decode(opcode, 1);
+    uint16_t x = decode(opcode, 2);
+    uint16_t y = decode(opcode, 1);
     switch (decode(opcode, 0)) {
         case 0:
             V[x] = V[y];
@@ -197,11 +201,11 @@ void Emulator::handle8 (uint16_t opcode) {
             V[x] = (V[x] ^ V[y]);
             break;
         case 4:
-            V[0xF] = (V[x] > 0xFF-V[y] ? 1 : 0);
+            V[0xF] = (V[x] > 0xFF-V[y] ? 1 : 0);    // check for overflow
             V[x] += V[y];
             break;
         case 5:
-            V[0xF] = (V[x] >= V[y] ? 1 : 0);
+            V[0xF] = (V[x] >= V[y] ? 1 : 0);    // check for overflow
             V[x] -= V[y];
             break;
         case 6:
@@ -209,7 +213,7 @@ void Emulator::handle8 (uint16_t opcode) {
             V[x] = (V[x] >> 1);
             break;
         case 7:
-            V[0xF] = (V[y] >= V[x] ? 1 : 0);
+            V[0xF] = (V[y] >= V[x] ? 1 : 0);    // check for overflow
             V[x] = V[y] - V[x];
             break;
         case 0xE:
@@ -224,7 +228,12 @@ void Emulator::handle8 (uint16_t opcode) {
 }
 void Emulator::SNE (uint16_t opcode) {
     // skip Vx != Vy
-    pc += ((V[decode(opcode, 2)] != V[decode(opcode, 1)]) ? 4 : 2);
+    if (V[decode(opcode, 2)] != V[decode(opcode, 1)]) {
+        pc += 4;
+    }
+    else {
+        pc += 2;
+    }
 }
 void Emulator::LDI (uint16_t opcode) {
     // I = NNN
@@ -238,19 +247,23 @@ void Emulator::JPV0 (uint16_t opcode) {
 void Emulator::RND (uint16_t opcode) {
     // Vx = rand & NN
     V[decode(opcode, 2)] = rng(randEngine) & decode(opcode, 0, 2);
+    pc += 2;
 }
 
 void Emulator::DRW (uint16_t opcode) {
     // draw
-    printf("D, %04X\n", opcode);
+    // printf("D, %04X\n", opcode);
+    pc += 2;
 }
 void Emulator::handleE (uint16_t opcode) {
     switch (decode(opcode, 0, 2)) {
         case 0x9E:
             // skip if key == Vx
+            pc += 2;
             break;
         case 0xA1:
             // skip if key != Vx
+            pc += 2;
             break;
         default:
             printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
@@ -275,13 +288,7 @@ void Emulator::handleF (uint16_t opcode) {
             break;
         case 0x1E:
             // I += Vx
-            
-            if (I <= 0xFFF - V[x]) {
-                V[0xF] = 0;
-            }
-            else {
-                V[0xF] = 1;
-            }
+            V[0xF] = (I > 0xFF-V[x] ? 1 : 0);   // check for overflow
             I += V[x];
 
             break;
@@ -314,4 +321,6 @@ void Emulator::handleF (uint16_t opcode) {
             printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
             std::exit(1);
     }
+
+    pc += 2;
 }

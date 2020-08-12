@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <cstdlib>
 #include <inttypes.h>
-#include "chip8-cpu.hpp"
+#include "chip8.hpp"
 
 #ifdef _WIN32
 #include <windows.h>
