@@ -111,17 +111,17 @@ depend:
 .PHONY : depend
 
 #=============================================================================
-# Target rules for targets named Chip8_Emulator.exe
+# Target rules for targets named Chip8_Emulator
 
 # Build rule for target.
-Chip8_Emulator.exe: cmake_check_build_system
-	$(MAKE) -f CMakeFiles/Makefile2 Chip8_Emulator.exe
-.PHONY : Chip8_Emulator.exe
+Chip8_Emulator: cmake_check_build_system
+	$(MAKE) -f CMakeFiles/Makefile2 Chip8_Emulator
+.PHONY : Chip8_Emulator
 
 # fast build rule for target.
-Chip8_Emulator.exe/fast:
-	$(MAKE) -f CMakeFiles/Chip8_Emulator.exe.dir/build.make CMakeFiles/Chip8_Emulator.exe.dir/build
-.PHONY : Chip8_Emulator.exe/fast
+Chip8_Emulator/fast:
+	$(MAKE) -f CMakeFiles/Chip8_Emulator.dir/build.make CMakeFiles/Chip8_Emulator.dir/build
+.PHONY : Chip8_Emulator/fast
 
 src/chip8.o: src/chip8.cpp.o
 
@@ -129,7 +129,7 @@ src/chip8.o: src/chip8.cpp.o
 
 # target to build an object file
 src/chip8.cpp.o:
-	$(MAKE) -f CMakeFiles/Chip8_Emulator.exe.dir/build.make CMakeFiles/Chip8_Emulator.exe.dir/src/chip8.cpp.o
+	$(MAKE) -f CMakeFiles/Chip8_Emulator.dir/build.make CMakeFiles/Chip8_Emulator.dir/src/chip8.cpp.o
 .PHONY : src/chip8.cpp.o
 
 src/chip8.i: src/chip8.cpp.i
@@ -138,7 +138,7 @@ src/chip8.i: src/chip8.cpp.i
 
 # target to preprocess a source file
 src/chip8.cpp.i:
-	$(MAKE) -f CMakeFiles/Chip8_Emulator.exe.dir/build.make CMakeFiles/Chip8_Emulator.exe.dir/src/chip8.cpp.i
+	$(MAKE) -f CMakeFiles/Chip8_Emulator.dir/build.make CMakeFiles/Chip8_Emulator.dir/src/chip8.cpp.i
 .PHONY : src/chip8.cpp.i
 
 src/chip8.s: src/chip8.cpp.s
@@ -147,7 +147,7 @@ src/chip8.s: src/chip8.cpp.s
 
 # target to generate assembly for a file
 src/chip8.cpp.s:
-	$(MAKE) -f CMakeFiles/Chip8_Emulator.exe.dir/build.make CMakeFiles/Chip8_Emulator.exe.dir/src/chip8.cpp.s
+	$(MAKE) -f CMakeFiles/Chip8_Emulator.dir/build.make CMakeFiles/Chip8_Emulator.dir/src/chip8.cpp.s
 .PHONY : src/chip8.cpp.s
 
 src/main.o: src/main.cpp.o
@@ -156,7 +156,7 @@ src/main.o: src/main.cpp.o
 
 # target to build an object file
 src/main.cpp.o:
-	$(MAKE) -f CMakeFiles/Chip8_Emulator.exe.dir/build.make CMakeFiles/Chip8_Emulator.exe.dir/src/main.cpp.o
+	$(MAKE) -f CMakeFiles/Chip8_Emulator.dir/build.make CMakeFiles/Chip8_Emulator.dir/src/main.cpp.o
 .PHONY : src/main.cpp.o
 
 src/main.i: src/main.cpp.i
@@ -165,7 +165,7 @@ src/main.i: src/main.cpp.i
 
 # target to preprocess a source file
 src/main.cpp.i:
-	$(MAKE) -f CMakeFiles/Chip8_Emulator.exe.dir/build.make CMakeFiles/Chip8_Emulator.exe.dir/src/main.cpp.i
+	$(MAKE) -f CMakeFiles/Chip8_Emulator.dir/build.make CMakeFiles/Chip8_Emulator.dir/src/main.cpp.i
 .PHONY : src/main.cpp.i
 
 src/main.s: src/main.cpp.s
@@ -174,7 +174,7 @@ src/main.s: src/main.cpp.s
 
 # target to generate assembly for a file
 src/main.cpp.s:
-	$(MAKE) -f CMakeFiles/Chip8_Emulator.exe.dir/build.make CMakeFiles/Chip8_Emulator.exe.dir/src/main.cpp.s
+	$(MAKE) -f CMakeFiles/Chip8_Emulator.dir/build.make CMakeFiles/Chip8_Emulator.dir/src/main.cpp.s
 .PHONY : src/main.cpp.s
 
 # Help Target
@@ -185,7 +185,7 @@ help:
 	@echo "... depend"
 	@echo "... rebuild_cache"
 	@echo "... edit_cache"
-	@echo "... Chip8_Emulator.exe"
+	@echo "... Chip8_Emulator"
 	@echo "... src/chip8.o"
 	@echo "... src/chip8.i"
 	@echo "... src/chip8.s"

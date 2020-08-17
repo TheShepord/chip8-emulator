@@ -9,7 +9,7 @@
 
 int main (int argc, const char *argv[]) {
     Emulator chip8;
-
+    
     if (argc > 1) {
         chip8.loadROM(argv[1]);
     }
@@ -18,8 +18,11 @@ int main (int argc, const char *argv[]) {
         std::exit(1);
     }
 
+    chip8.initDisplay();
+
     for (;;) {
         chip8.update();
+
 
     }
     

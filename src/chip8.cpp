@@ -4,8 +4,7 @@
 #include <cmath>
 #include "chip8.hpp"
 #include <SDL2/SDL.h>
-
-#define DEBUG
+#include "chip8.hpp"
 
 uint16_t decode(uint16_t instruction, int index, int len=1) {
     // returns hex value between bytes instruction[i] and instruction[i+4*len]
@@ -31,9 +30,18 @@ Emulator::Emulator() :
         &Emulator::handleE,
         &Emulator::handleF
     },
-    START (0x200)
+    START (0x200),
+    window (NULL)
 {
+    // SCREEN_WIDTH = 64;
+    // SCREEN_HEIGHT = 32;
+    // START = 0x200;
+
+    // gfx = new uint8_t[SCREEN_WIDTH*SCREEN_HEIGHT];
+
     pc = START;
+    I = 0;
+    sptr = 0;
 
     const unsigned short FONTSET_SIZE = 80;
 
@@ -63,7 +71,7 @@ Emulator::Emulator() :
 
 void Emulator::loadROM (const char *rom) {
     FILE *fptr = NULL;
-
+    
     if ((fptr = fopen(rom, "rb")) == NULL) {
         printf("Failed to open %s. Does the file exist?\n", rom);
         std::exit(1);
@@ -90,9 +98,52 @@ void Emulator::loadROM (const char *rom) {
 
     fclose(fptr);
 
+        // else {
+        //     screenSurface = SDL_GetWindowSurface(window);
+
+        //     SDL_FillRect(screenSurface, NULL, SDL_MapRGB(screenSurface->format, 0xFF, 0xFF, 0xFF));
+        //     SDL_UpdateWindowSurface(window);
+
+        //     SDL_Delay(2000);
+
+        //     SDL_DestroyWindow(window);
+        //     SDL_Quit();
+
+        // }
+
+}
+
+void Emulator::initDisplay() {
+
+    if (SDL_Init(SDL_INIT_VIDEO) < 0 ) {
+        printf("SDL failed to initialize. SDL_Error: %s\n", SDL_GetError());
+    }
+
+    else {
+        window = SDL_CreateWindow("Chip-8 Emulator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, \
+                                  SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+        
+        if (window == NULL) {
+            printf("Window failed to be created. SDL_Error: %s\n", SDL_GetError());
+        }
+
+        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+        SDL_RenderDrawPoint(renderer, 400, 300);
+        SDL_RenderPresent(renderer);
+    }
 }
 
 void Emulator::update () {
+
+    SDL_Event event;
+    
+    while (SDL_PollEvent(&event) != 0) {
+        if (event.type == SDL_QUIT) {
+            std::exit(1);
+        }
+    }
 
     opcode = (memory[pc] << 8) | memory[pc+1];  // fetch
 

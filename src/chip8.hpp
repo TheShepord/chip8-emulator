@@ -1,9 +1,10 @@
 #include <inttypes.h>
 #include <random>
+#include <SDL2/SDL.h>
 
 
-#ifndef EMULATOR_H
-#define EMULATOR_H
+#ifndef CHIP8_H
+#define CHIP8_H
 
 unsigned short decode(uint16_t opcode, int index, int len);
 
@@ -11,6 +12,7 @@ class Emulator {
     public:
         Emulator();
         void loadROM(const char *rom);
+        void initDisplay();
         void update();
 
     private:
@@ -25,7 +27,13 @@ class Emulator {
         uint16_t stack[16];
         uint8_t sptr;  // current stack frame
 
-        uint8_t gfx[64*32];
+        static const int SCREEN_WIDTH = 64;
+        static const int SCREEN_HEIGHT = 32;
+        uint8_t gfx[SCREEN_WIDTH*SCREEN_HEIGHT];
+
+        SDL_Window *window;
+        SDL_Renderer *renderer;
+
 
         // random number generator
         std::random_device randDevice;
