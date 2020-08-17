@@ -11,9 +11,10 @@ unsigned short decode(uint16_t opcode, int index, int len);
 class Emulator {
     public:
         Emulator();
-        void loadROM(const char *rom);
-        void initDisplay();
-        void update();
+        ~Emulator();
+        bool loadROM(const char *rom);
+        bool initDisplay();
+        bool update();
 
     private:
         const unsigned short START;

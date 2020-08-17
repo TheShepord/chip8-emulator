@@ -2,8 +2,11 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
-#include "chip8.hpp"
+#include <stdbool.h>
+#include <stdexcept>
+
 #include <SDL2/SDL.h>
+
 #include "chip8.hpp"
 
 uint16_t decode(uint16_t instruction, int index, int len=1) {
@@ -68,80 +71,81 @@ Emulator::Emulator() :
     
 }
 
-
-void Emulator::loadROM (const char *rom) {
-    FILE *fptr = NULL;
-    
-    if ((fptr = fopen(rom, "rb")) == NULL) {
-        printf("Failed to open %s. Does the file exist?\n", rom);
-        std::exit(1);
-    }
-
-
-    const char *ext = std::strrchr(rom, '.') + 1;
-    if (std::strcmp("ch8", ext)) {
-        printf("Unsupported file extension %s, file should be of type .ch8\n", ext);
-        std::exit(1);
-    }
-
-
-    fseek(fptr, 0L, SEEK_END);
-    int fsize = ftell(fptr);
-    rewind(fptr);
-
-    if (fsize > 4096 - START) {
-        printf("Invalid .ch8 program. Size should be at most %i bytes, but is instead %i bytes.\n",\
-        4096-START, fsize);
-        std::exit(1);
-    }
-    fread(memory+START, fsize, 1, fptr);
-
-    fclose(fptr);
-
-        // else {
-        //     screenSurface = SDL_GetWindowSurface(window);
-
-        //     SDL_FillRect(screenSurface, NULL, SDL_MapRGB(screenSurface->format, 0xFF, 0xFF, 0xFF));
-        //     SDL_UpdateWindowSurface(window);
-
-        //     SDL_Delay(2000);
-
-        //     SDL_DestroyWindow(window);
-        //     SDL_Quit();
-
-        // }
-
+Emulator::~Emulator() {
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 }
 
-void Emulator::initDisplay() {
+
+bool Emulator::loadROM (const char *rom) {
+    FILE *fptr = NULL;
+    bool success = true;
+
+    if ((fptr = fopen(rom, "rb")) == NULL) {
+        printf("Failed to open %s. Does the file exist?\n", rom);
+        success = false;
+    }
+    else {
+        const char *ext = std::strrchr(rom, '.') + 1;
+        if (std::strcmp("ch8", ext)) {
+            printf("Unsupported file extension %s, file should be of type .ch8\n", ext);
+            success = false;
+        }
+        else {
+            fseek(fptr, 0L, SEEK_END);
+            int fsize = ftell(fptr);
+            rewind(fptr);
+
+            if (fsize > 4096 - START) {
+                printf("Invalid .ch8 program. Size should be at most %i bytes, but is instead %i bytes.\n",\
+                4096-START, fsize);
+                success = false;
+            }
+            else {
+                fread(memory+START, fsize, 1, fptr);
+            }
+        }
+
+        fclose(fptr);
+    }
+    return success;
+}
+
+bool Emulator::initDisplay() {
+
+    bool success = true;
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0 ) {
         printf("SDL failed to initialize. SDL_Error: %s\n", SDL_GetError());
+        success = false;
     }
-
     else {
         window = SDL_CreateWindow("Chip-8 Emulator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, \
                                   SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
         
         if (window == NULL) {
             printf("Window failed to be created. SDL_Error: %s\n", SDL_GetError());
+            success = false;
         }
 
-        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+        // renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
-        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-        SDL_RenderDrawPoint(renderer, 400, 300);
-        SDL_RenderPresent(renderer);
+        // SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+        // SDL_RenderDrawPoint(renderer, 400, 300);
+        // SDL_RenderPresent(renderer);
     }
+
+    return success;
 }
 
-void Emulator::update () {
+bool Emulator::update () {
 
     SDL_Event event;
     
     while (SDL_PollEvent(&event) != 0) {
         if (event.type == SDL_QUIT) {
-            std::exit(1);
+            return false;
         }
     }
 
@@ -151,10 +155,11 @@ void Emulator::update () {
         printf("%04X:%i\n", decode(opcode,3), pc);
         (this->*optable[decode(opcode, 3)])(opcode);   // decode and execute
 
-        // equivalent to std::invoke(optable[decode(opcode, 3)], this, opcode), but doesn't require <functional>
+        // equivalent to std::invoke(optable[decode(opcode, 3)], this, opcode), but faster
     }
     catch (int e) {
         printf("Opcode %04X at byte %i\n returned error %i", opcode, pc - 0x200, e);
+        return false;
     }
 
     if (delayTimer > 0) {
@@ -165,14 +170,14 @@ void Emulator::update () {
         --soundTimer;
     }
 
-    
+    return true;
 }
 
 void Emulator::handle0(uint16_t opcode) {
     switch (opcode) {
         case 0x00E0:
             // clearDisplay();
-            memset(gfx, 0, sizeof(gfx)/sizeof(gfx[0]));
+            std::memset(gfx, 0, sizeof(gfx)/sizeof(gfx[0]));
             pc += 2;
             break;
         case 0x00EE:
@@ -181,8 +186,9 @@ void Emulator::handle0(uint16_t opcode) {
             pc = stack[sptr];
             break;
         default:
-            printf("Unknown opcode %04X at byte %i\n", opcode, pc - 0x200);
-            std::exit(1);
+            throw std::invalid_argument("Unknown opcode.");
+            // printf("Unknown opcode %04X at byte %i\n", opcode, pc - 0x200);
+            // success = false;
     }
 }
 void Emulator::JMP (uint16_t opcode) {
@@ -238,6 +244,7 @@ void Emulator::ADD_BYTE (uint16_t opcode) {
 void Emulator::handle8 (uint16_t opcode) {
     uint16_t x = decode(opcode, 2);
     uint16_t y = decode(opcode, 1);
+
     switch (decode(opcode, 0)) {
         case 0:
             V[x] = V[y];
@@ -272,8 +279,9 @@ void Emulator::handle8 (uint16_t opcode) {
             V[x] = (V[x] << 1);
             break;
         default:
-            printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
-            std::exit(1);
+            throw std::invalid_argument("Unknown opcode.");
+            // printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
+            // std::exit(1);
     }
     pc += 2;
 }
@@ -317,8 +325,9 @@ void Emulator::handleE (uint16_t opcode) {
             pc += 2;
             break;
         default:
-            printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
-            std::exit(1);
+            throw std::invalid_argument("Unknown opcode.");
+            // printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
+            // std::exit(1);
     }
 }
 void Emulator::handleF (uint16_t opcode) {
@@ -369,8 +378,9 @@ void Emulator::handleF (uint16_t opcode) {
             I += (x+1);
             break;
         default:
-            printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
-            std::exit(1);
+            throw std::invalid_argument("Unknown opcode.");
+            // printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
+            // std::exit(1);
     }
 
     pc += 2;
