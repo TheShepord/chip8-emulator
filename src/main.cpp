@@ -16,14 +16,20 @@ int main (int argc, const char *argv[]) {
     }
 
     Emulator chip8;
-    if (! chip8.loadROM(argv[1])) return 1;
-    if (! chip8.initDisplay()) return 1;
 
-    bool running = true;
+    bool running = chip8.loadROM(argv[1]) && chip8.initDisplay();
+
+
+    // catch (char *e) {
+    //     printf("Exception: %s\n", e);
+    // }
+    // if (! chip8.loadROM(argv[1])) return 1;
+    // if (! chip8.initDisplay()) return 1;
     
     while (running) {
         running = chip8.update();
 
     }
     
+    return 0;
 }

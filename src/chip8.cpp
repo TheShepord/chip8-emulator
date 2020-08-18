@@ -9,9 +9,25 @@
 
 #include "chip8.hpp"
 
+// #define CHIP8_DEBUG
+
 uint16_t decode(uint16_t instruction, int index, int len=1) {
-    // returns hex value between bytes instruction[i] and instruction[i+4*len]
+    /* returns hex value between bytes instruction[i] and instruction[i-4*len],
+    reading from LSB in Big-Endian */
     return (instruction >> (4*index)) & ((int) (std::pow(0x10, len) - 1));
+}
+
+short char2hex (char c) {
+    /* returns hex value of char 'c', for 'c' digit or lowercase a-f */
+    short res = -1;
+    if (c >= '0' && c <= '9') {
+        res = c - '0';
+    }
+    else if (c >= 'a' && c <= 'f') {
+        res = c - 'a' + 0xA;
+    }
+
+    return res;
 }
 
 Emulator::Emulator() :
@@ -34,14 +50,9 @@ Emulator::Emulator() :
         &Emulator::handleF
     },
     START (0x200),
-    window (NULL)
+    window (NULL),
+    pressedKeys {0}
 {
-    // SCREEN_WIDTH = 64;
-    // SCREEN_HEIGHT = 32;
-    // START = 0x200;
-
-    // gfx = new uint8_t[SCREEN_WIDTH*SCREEN_HEIGHT];
-
     pc = START;
     I = 0;
     sptr = 0;
@@ -67,7 +78,7 @@ Emulator::Emulator() :
         0xF0, 0x80, 0xF0, 0x80, 0x80  // F
     };
 
-    std::memcpy(memory+0x50, fontset, FONTSET_SIZE);
+    std::memcpy(memory, fontset, FONTSET_SIZE);
     
 }
 
@@ -79,6 +90,7 @@ Emulator::~Emulator() {
 
 
 bool Emulator::loadROM (const char *rom) {
+    /* Loads romfile 'rom' into emulator */
     FILE *fptr = NULL;
     bool success = true;
 
@@ -113,6 +125,7 @@ bool Emulator::loadROM (const char *rom) {
 }
 
 bool Emulator::initDisplay() {
+    /* initiate SDL and SDL window */
 
     bool success = true;
 
@@ -140,25 +153,50 @@ bool Emulator::initDisplay() {
 }
 
 bool Emulator::update () {
-
-    SDL_Event event;
+    /* one chip-8 cycle. Gets keydown and quit events, handles opcodes, and decrements timers */
     
-    while (SDL_PollEvent(&event) != 0) {
-        if (event.type == SDL_QUIT) {
-            return false;
-        }
+    // handling quit and keydown events
+    static SDL_Event event;
+    static bool clearKeysFlag = false;
+
+    if (clearKeysFlag) {
+        std::memset(pressedKeys, 0, sizeof(pressedKeys)/sizeof(pressedKeys[0]));
+        clearKeysFlag = false;
     }
 
-    opcode = (memory[pc] << 8) | memory[pc+1];  // fetch
+    if (SDL_PollEvent(&event) != 0) {
+        while (SDL_PollEvent(&event) != 0) {
+            if (event.type == SDL_KEYDOWN) {
+                short keyVal = char2hex(event.key.keysym.sym);
+                if (keyVal != -1) {
+                    pressedKeys[char2hex(event.key.keysym.sym)] = 1;
+                }
+            }
+            else if (event.type == SDL_QUIT) {
+                return false;
+            }
+        }
+
+        clearKeysFlag = true;
+    }
+
+    // fetch, decode, execute
+    static uint16_t opcode = (memory[pc] << 8) | memory[pc+1];  // fetch
 
     try {
-        printf("%04X:%i\n", decode(opcode,3), pc);
-        (this->*optable[decode(opcode, 3)])(opcode);   // decode and execute
+        #ifdef CHIP8_DEBUG
+            printf("%04X:%i\n", opcode, pc);
+        #endif
 
+        (this->*optable[decode(opcode, 3)])(opcode);   // decode and execute
         // equivalent to std::invoke(optable[decode(opcode, 3)], this, opcode), but faster
     }
+    catch (char *e) {
+        printf("Opcode %04X at byte %i\n returned exception %s", opcode, pc - 0x200, e);
+        return false;
+    }
     catch (int e) {
-        printf("Opcode %04X at byte %i\n returned error %i", opcode, pc - 0x200, e);
+        printf("Opcode %04X at byte %i\n returned exception %i", opcode, pc - 0x200, e);
         return false;
     }
 
@@ -187,8 +225,6 @@ void Emulator::handle0(uint16_t opcode) {
             break;
         default:
             throw std::invalid_argument("Unknown opcode.");
-            // printf("Unknown opcode %04X at byte %i\n", opcode, pc - 0x200);
-            // success = false;
     }
 }
 void Emulator::JMP (uint16_t opcode) {
@@ -259,29 +295,29 @@ void Emulator::handle8 (uint16_t opcode) {
             V[x] = (V[x] ^ V[y]);
             break;
         case 4:
-            V[0xF] = (V[x] > 0xFF-V[y] ? 1 : 0);    // check for overflow
+            V[0xF] = ((V[x] > 0xFF-V[y]) ? 1 : 0);    // check for overflow
             V[x] += V[y];
             break;
         case 5:
-            V[0xF] = (V[x] >= V[y] ? 1 : 0);    // check for overflow
+            V[0xF] = ((V[x] >= V[y]) ? 1 : 0);    // check for overflow
             V[x] -= V[y];
             break;
         case 6:
+            // shift right
             V[0xF] = (V[x] & 1);  // get LSB
             V[x] = (V[x] >> 1);
             break;
         case 7:
-            V[0xF] = (V[y] >= V[x] ? 1 : 0);    // check for overflow
+            V[0xF] = ((V[y] >= V[x]) ? 1 : 0);    // check for overflow
             V[x] = V[y] - V[x];
             break;
         case 0xE:
+            // shift left
             V[0xF] = (V[x] >> 15);  // get MSB
             V[x] = (V[x] << 1);
             break;
         default:
             throw std::invalid_argument("Unknown opcode.");
-            // printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
-            // std::exit(1);
     }
     pc += 2;
 }
@@ -318,16 +354,24 @@ void Emulator::handleE (uint16_t opcode) {
     switch (decode(opcode, 0, 2)) {
         case 0x9E:
             // skip if key == Vx
-            pc += 2;
+            if (pressedKeys[decode(opcode, 2)] == 1) {
+                pc += 4;
+            }
+            else {
+                pc += 2;
+            }
             break;
         case 0xA1:
             // skip if key != Vx
-            pc += 2;
+            if (pressedKeys[decode(opcode, 2)] != 1) {
+                pc += 4;
+            }
+            else {
+                pc += 2;
+            }
             break;
         default:
             throw std::invalid_argument("Unknown opcode.");
-            // printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
-            // std::exit(1);
     }
 }
 void Emulator::handleF (uint16_t opcode) {
@@ -339,6 +383,15 @@ void Emulator::handleF (uint16_t opcode) {
             break;
         case 0x0A:
             // wait for key then store in Vx
+            SDL_Event waitForKey;
+            short keyVal;
+
+            do {
+                SDL_WaitEvent(&waitForKey);
+            } while (waitForKey.type != SDL_KEYDOWN \
+                    || (keyVal = char2hex(waitForKey.key.keysym.sym)) == -1);
+
+            V[x] = keyVal;
             break;
         case 0x15:
             delayTimer = V[x];
@@ -348,11 +401,13 @@ void Emulator::handleF (uint16_t opcode) {
             break;
         case 0x1E:
             // I += Vx
-            V[0xF] = (I > 0xFF-V[x] ? 1 : 0);   // check for overflow
+            V[0xF] = ((I > 0xFF-V[x]) ? 1 : 0);   // check for overflow
             I += V[x];
-
             break;
         case 0x29:
+            // I = sprite location in memory for digit Vx. Since digit sprites are 5 bytes long
+            // and stored starting at 0, I = 5 * Vx
+            I = 5*V[x];
             break;
         case 0x33: {
             // store BCD representation of Vx into I, I+1, I+2
@@ -379,8 +434,6 @@ void Emulator::handleF (uint16_t opcode) {
             break;
         default:
             throw std::invalid_argument("Unknown opcode.");
-            // printf("Unknown opcode %04X at byte %i\n", opcode, pc - START);
-            // std::exit(1);
     }
 
     pc += 2;

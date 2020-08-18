@@ -17,8 +17,7 @@ class Emulator {
         bool update();
 
     private:
-        const unsigned short START;
-        uint16_t opcode;
+        const unsigned short START; // where roms should be loaded into memory
         uint8_t V[16];  // general-purpose registers + flag register
         uint8_t memory[4096];
         uint16_t I;  // index register
@@ -32,9 +31,10 @@ class Emulator {
         static const int SCREEN_HEIGHT = 32;
         uint8_t gfx[SCREEN_WIDTH*SCREEN_HEIGHT];
 
+        // components for SDL graphics and event handling
         SDL_Window *window;
         SDL_Renderer *renderer;
-
+        uint8_t pressedKeys[16];  // for chip-8's 16 keys. stores 0 if key isn't down, 1 if key is down
 
         // random number generator
         std::random_device randDevice;
