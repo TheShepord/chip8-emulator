@@ -29,17 +29,12 @@ class Emulator {
 
         static const int SCREEN_WIDTH = 64;
         static const int SCREEN_HEIGHT = 32;
-        uint8_t gfx[SCREEN_WIDTH*SCREEN_HEIGHT];
+        uint8_t gfx[SCREEN_WIDTH * SCREEN_HEIGHT]; // stored row-wise
 
         // components for SDL graphics and event handling
         SDL_Window *window;
         SDL_Renderer *renderer;
         uint8_t pressedKeys[16];  // for chip-8's 16 keys. stores 0 if key isn't down, 1 if key is down
-
-        // random number generator
-        std::random_device randDevice;
-        std::mt19937 randEngine{randDevice()};
-        std::uniform_int_distribution<uint8_t> rng{0, 255};
 
         // table of opcode functions
         void (Emulator::*optable[16]) (uint16_t opcode);

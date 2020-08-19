@@ -4,6 +4,7 @@
 #include <cmath>
 #include <stdbool.h>
 #include <stdexcept>
+#include <random>
 
 #include <SDL2/SDL.h>
 
@@ -11,14 +12,14 @@
 
 // #define CHIP8_DEBUG
 
+/* returns hex value between bytes instruction[i] and instruction[i-4*len],
+reading from LSB in Big-Endian */
 uint16_t decode(uint16_t instruction, int index, int len=1) {
-    /* returns hex value between bytes instruction[i] and instruction[i-4*len],
-    reading from LSB in Big-Endian */
     return (instruction >> (4*index)) & ((int) (std::pow(0x10, len) - 1));
 }
 
+/* returns hex value of char 'c', for 'c' digit or lowercase a-f */
 short char2hex (char c) {
-    /* returns hex value of char 'c', for 'c' digit or lowercase a-f */
     short res = -1;
     if (c >= '0' && c <= '9') {
         res = c - '0';
@@ -51,7 +52,8 @@ Emulator::Emulator() :
     },
     START (0x200),
     window (NULL),
-    pressedKeys {0}
+    pressedKeys {0},
+    gfx {0}
 {
     pc = START;
     I = 0;
@@ -88,9 +90,9 @@ Emulator::~Emulator() {
     SDL_Quit();
 }
 
-
+/* Loads romfile 'rom' into emulator */
 bool Emulator::loadROM (const char *rom) {
-    /* Loads romfile 'rom' into emulator */
+
     FILE *fptr = NULL;
     bool success = true;
 
@@ -109,9 +111,9 @@ bool Emulator::loadROM (const char *rom) {
             int fsize = ftell(fptr);
             rewind(fptr);
 
-            if (fsize > 4096 - START) {
+            if (fsize > sizeof(memory) - START) {
                 printf("Invalid .ch8 program. Size should be at most %i bytes, but is instead %i bytes.\n",\
-                4096-START, fsize);
+                (int) (sizeof(memory)-START), fsize);
                 success = false;
             }
             else {
@@ -124,8 +126,8 @@ bool Emulator::loadROM (const char *rom) {
     return success;
 }
 
+/* initiate SDL and SDL window */
 bool Emulator::initDisplay() {
-    /* initiate SDL and SDL window */
 
     bool success = true;
 
@@ -142,18 +144,14 @@ bool Emulator::initDisplay() {
             success = false;
         }
 
-        // renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-
-        // SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-        // SDL_RenderDrawPoint(renderer, 400, 300);
-        // SDL_RenderPresent(renderer);
+        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     }
 
     return success;
 }
 
+/* one chip-8 cycle. Gets keydown and quit events, handles opcodes, and decrements timers */
 bool Emulator::update () {
-    /* one chip-8 cycle. Gets keydown and quit events, handles opcodes, and decrements timers */
     
     // handling quit and keydown events
     static SDL_Event event;
@@ -164,28 +162,30 @@ bool Emulator::update () {
         clearKeysFlag = false;
     }
 
-    if (SDL_PollEvent(&event) != 0) {
-        while (SDL_PollEvent(&event) != 0) {
-            if (event.type == SDL_KEYDOWN) {
-                short keyVal = char2hex(event.key.keysym.sym);
-                if (keyVal != -1) {
-                    pressedKeys[char2hex(event.key.keysym.sym)] = 1;
-                }
-            }
-            else if (event.type == SDL_QUIT) {
-                return false;
+    while (SDL_PollEvent(&event) != 0) {
+        if (event.type == SDL_KEYDOWN) {
+            short keyVal = char2hex(event.key.keysym.sym);
+            if (keyVal != -1) {
+                pressedKeys[char2hex(event.key.keysym.sym)] = 1;
+                clearKeysFlag = true;
+
+                #ifdef CHIP8_DEBUG
+                    printf("key:%i\n",keyVal);
+                #endif
             }
         }
-
-        clearKeysFlag = true;
+        else if (event.type == SDL_QUIT) {
+            return false;
+        }
     }
 
-    // fetch, decode, execute
-    static uint16_t opcode = (memory[pc] << 8) | memory[pc+1];  // fetch
+    static uint16_t opcode;
+
+    opcode = (memory[pc] << 8) | memory[pc+1];  // fetch
 
     try {
         #ifdef CHIP8_DEBUG
-            printf("%04X:%i\n", opcode, pc);
+            printf("opcode:%04X, pc:%i\n", opcode, pc);
         #endif
 
         (this->*optable[decode(opcode, 3)])(opcode);   // decode and execute
@@ -207,7 +207,6 @@ bool Emulator::update () {
     if (soundTimer > 0) {
         --soundTimer;
     }
-
     return true;
 }
 
@@ -341,13 +340,63 @@ void Emulator::JPV0 (uint16_t opcode) {
 }
 void Emulator::RND (uint16_t opcode) {
     // Vx = rand & NN
+
+    // random number generator
+    static std::random_device randDevice;
+    static std::mt19937 randEngine{randDevice()};
+    static std::uniform_int_distribution<uint8_t> rng{0, 255};
+
     V[decode(opcode, 2)] = rng(randEngine) & decode(opcode, 0, 2);
     pc += 2;
 }
 
 void Emulator::DRW (uint16_t opcode) {
-    // draw
-    // printf("D, %04X\n", opcode);
+    // opcode Dxyn, draw n-byte sprite starting at memory[I] to gfx [Vx, Vy]
+
+    static const unsigned short SPRITE_WIDTH = 8;
+    
+    unsigned short x = decode(opcode,2) % SCREEN_WIDTH;  // modulos allows wrap-around
+    unsigned short y = decode(opcode,1) % SCREEN_HEIGHT;
+
+    // since gfx stored row-wise, starting addr is Vy * SCREEN_WIDTH + Vx.
+    int startAddr = V[y] * SCREEN_WIDTH + V[x];
+    int addr;
+
+    uint8_t currPixel;
+
+    for (unsigned short i = 0, spriteHeight = decode(opcode, 0); i < spriteHeight ; ++i) {
+        for (unsigned short j = 0; j < SPRITE_WIDTH; ++j) {
+            if ((x + j < SCREEN_WIDTH) && (y + i < SCREEN_HEIGHT)) {  // sprites drawn partially off-screen are clipped
+                addr = startAddr + i*SCREEN_WIDTH - j;  //
+
+                // each memory[I+i] byte holds ON/OFF information for 8 pixels. To retrieve
+                // each at a time, must AND with value at current pixel then shift to the right to
+                // retrieve 0 or 1.
+                currPixel = (memory[I+i] & ((uint8_t) std::pow(2, j))) >> j;
+                // printf("%hhu", currPixel);
+                if (gfx[addr] && currPixel) { // if collision, V[F] = 1
+                    V[0xF] = 1;
+                }
+                // To update gfx, XOR currPixel with corresponding gfx location
+                gfx[addr] ^= currPixel;
+            }
+        }
+    }
+
+    for (int i = 0, n = SCREEN_HEIGHT*SCREEN_WIDTH; i < n; ++i) {
+        if (gfx[i] == 0) {
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        }
+        else {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        }
+        // printf("%hhu", gfx[i]);
+
+        SDL_RenderDrawPoint(renderer, i%SCREEN_WIDTH, std::floor(i/SCREEN_WIDTH));
+    }
+
+    SDL_RenderPresent(renderer);
+
     pc += 2;
 }
 void Emulator::handleE (uint16_t opcode) {
@@ -388,10 +437,20 @@ void Emulator::handleF (uint16_t opcode) {
 
             do {
                 SDL_WaitEvent(&waitForKey);
+
+                // handles attempting to close window while waiting for key
+                if (waitForKey.type == SDL_QUIT) {
+                    SDL_PushEvent(&waitForKey);
+                    return;
+                }
             } while (waitForKey.type != SDL_KEYDOWN \
                     || (keyVal = char2hex(waitForKey.key.keysym.sym)) == -1);
-
             V[x] = keyVal;
+
+            #ifdef CHIP8_DEBUG
+                printf("waitKey:%i\n", keyVal);
+            #endif
+
             break;
         case 0x15:
             delayTimer = V[x];
@@ -414,7 +473,7 @@ void Emulator::handleF (uint16_t opcode) {
             uint8_t ones, tens, hundreds;
             uint16_t val = V[x];
             ones = val % 10;
-            val = val/10;
+            val = val / 10;
             tens = val % 10;
             hundreds = val / 100;
             memory[I] = hundreds;
