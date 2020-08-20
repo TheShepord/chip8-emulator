@@ -10,7 +10,7 @@
 
 #include "chip8.hpp"
 
-// #define CHIP8_DEBUG
+#define CHIP8_DEBUG
 
 /* returns hex value between bytes instruction[i] and instruction[i-4*len],
 reading from LSB in Big-Endian */
@@ -52,12 +52,16 @@ Emulator::Emulator() :
     },
     START (0x200),
     window (NULL),
+    renderer (NULL),
+    texture (NULL),
     pressedKeys {0},
     gfx {0}
 {
     pc = START;
     I = 0;
     sptr = 0;
+    delayTimer = 0;
+    soundTimer = 0;
 
     const unsigned short FONTSET_SIZE = 80;
 
@@ -136,15 +140,30 @@ bool Emulator::initDisplay() {
         success = false;
     }
     else {
-        window = SDL_CreateWindow("Chip-8 Emulator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, \
-                                  SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+        window = SDL_CreateWindow(
+            "Chip-8 Emulator",
+            SDL_WINDOWPOS_CENTERED,
+            SDL_WINDOWPOS_CENTERED,
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
+            SDL_WINDOW_SHOWN |
+            SDL_WINDOW_ALLOW_HIGHDPI);
+            //SDL_WINDOW_RESIZABLE);
         
         if (window == NULL) {
             printf("Window failed to be created. SDL_Error: %s\n", SDL_GetError());
             success = false;
         }
 
-        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+        else {
+            renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+
+            if (renderer == NULL) {
+                printf("Renderer failed to initialize. SDL_Error: %s\n", SDL_GetError());
+                success = false;
+            }
+        }
+        
     }
 
     return success;
@@ -180,6 +199,8 @@ bool Emulator::update () {
     }
 
     static uint16_t opcode;
+    static int cycle = 0;
+    static const int CYCLE_PER_FRAME = 60; // CPU 500Hz, timers 60Hz
 
     opcode = (memory[pc] << 8) | memory[pc+1];  // fetch
 
@@ -200,44 +221,72 @@ bool Emulator::update () {
         return false;
     }
 
-    if (delayTimer > 0) {
-        --delayTimer;
+    ++cycle;
+
+    if (cycle >= CYCLE_PER_FRAME) {
+        cycle = 0;
+
+        if (delayTimer > 0) {
+            --delayTimer;
+        }
+
+        if (soundTimer > 0) {
+            --soundTimer;
+        }
     }
 
-    if (soundTimer > 0) {
-        --soundTimer;
-    }
+    
     return true;
 }
+
+/* updates display with current gfx */
+void Emulator::refreshDisplay() {
+    for (int i = 0, n = SCREEN_HEIGHT*SCREEN_WIDTH; i < n; ++i) {
+        if (gfx[i] == 0) {
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        }
+        else {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        }
+
+        SDL_RenderDrawPoint(renderer, i%SCREEN_WIDTH, std::floor(i/SCREEN_WIDTH));
+    }
+
+    SDL_RenderPresent(renderer);
+}
+
+
 
 void Emulator::handle0(uint16_t opcode) {
     switch (opcode) {
         case 0x00E0:
-            // clearDisplay();
+            // 00E0 clear display;
             std::memset(gfx, 0, sizeof(gfx)/sizeof(gfx[0]));
+            refreshDisplay();
+
             pc += 2;
             break;
         case 0x00EE:
-            // subroutine return
+            // 00EE subroutine return
             --sptr;
-            pc = stack[sptr];
+            pc = stack[sptr] + 2;
             break;
         default:
             throw std::invalid_argument("Unknown opcode.");
     }
 }
 void Emulator::JMP (uint16_t opcode) {
-    // jump to NNN
+    // 1NNN jump to NNN
     pc = decode(opcode, 0, 3);
 }
 void Emulator::CALL (uint16_t opcode) {
-    // jump to subroutine at NNN
+    // 2NNN jump to subroutine at NNN
     stack[sptr] = pc;
     ++sptr;
     pc = decode(opcode, 0, 3);
 }
 void Emulator::SEQ_BYTE (uint16_t opcode) {
-    // skip Vx == NN
+    // 3XNN skip Vx == NN
     if (V[decode(opcode, 2)] == decode(opcode, 0, 2)) {
         pc += 4;
     }
@@ -246,7 +295,7 @@ void Emulator::SEQ_BYTE (uint16_t opcode) {
     }
 }
 void Emulator::SNE_BYTE (uint16_t opcode) {
-    // skip Vx != NN
+    // 4XNN skip Vx != NN
     if (V[decode(opcode, 2)] != decode(opcode, 0, 2)) {
         pc += 4;
     }
@@ -255,7 +304,7 @@ void Emulator::SNE_BYTE (uint16_t opcode) {
     }
 }
 void Emulator::SEQ (uint16_t opcode) {
-    // skip Vx == Vy
+    // 5XY0 skip Vx == Vy
     if (V[decode(opcode, 2)] == V[decode(opcode, 1)]) {
         pc += 4;
     }
@@ -264,12 +313,12 @@ void Emulator::SEQ (uint16_t opcode) {
     }
 }
 void Emulator::LD (uint16_t opcode) {
-    // Vx = NN
+    // 6XNN Vx = NN
     V[decode(opcode, 2)] = decode(opcode, 0, 2);
     pc += 2;
 }
 void Emulator::ADD_BYTE (uint16_t opcode) {
-    // Vx += NN if not carry flag (i.e. if x != F)
+    // 7XNN Vx += NN if not carry flag (i.e. if x != F)
     uint16_t x = decode(opcode, 2);
     if (x != 0xF) {
         V[x] += decode(opcode, 0, 2);
@@ -282,36 +331,43 @@ void Emulator::handle8 (uint16_t opcode) {
 
     switch (decode(opcode, 0)) {
         case 0:
+            // 8XY0
             V[x] = V[y];
             break;
         case 1:
+            // 8XY1
             V[x] = (V[x] | V[y]);
             break;
         case 2:
+            // 8XY2
             V[x] = (V[x] & V[y]);
             break;
         case 3:
+            // 8XY3
             V[x] = (V[x] ^ V[y]);
             break;
         case 4:
+            // 8XY4
             V[0xF] = ((V[x] > 0xFF-V[y]) ? 1 : 0);    // check for overflow
             V[x] += V[y];
             break;
         case 5:
+            // 8XY5
             V[0xF] = ((V[x] >= V[y]) ? 1 : 0);    // check for overflow
             V[x] -= V[y];
             break;
         case 6:
-            // shift right
+            // 8X06 shift right
             V[0xF] = (V[x] & 1);  // get LSB
             V[x] = (V[x] >> 1);
             break;
         case 7:
+            // 8XY7
             V[0xF] = ((V[y] >= V[x]) ? 1 : 0);    // check for overflow
             V[x] = V[y] - V[x];
             break;
         case 0xE:
-            // shift left
+            // 8X0E shift left
             V[0xF] = (V[x] >> 15);  // get MSB
             V[x] = (V[x] << 1);
             break;
@@ -321,7 +377,7 @@ void Emulator::handle8 (uint16_t opcode) {
     pc += 2;
 }
 void Emulator::SNE (uint16_t opcode) {
-    // skip Vx != Vy
+    // 9XY0 skip Vx != Vy
     if (V[decode(opcode, 2)] != V[decode(opcode, 1)]) {
         pc += 4;
     }
@@ -330,16 +386,16 @@ void Emulator::SNE (uint16_t opcode) {
     }
 }
 void Emulator::LDI (uint16_t opcode) {
-    // I = NNN
+    // ANNN I = NNN
     I = decode(opcode, 0, 3);
     pc += 2;
 }
 void Emulator::JPV0 (uint16_t opcode) {
-    // jump to V0 + NNN
+    // BNNN jump to V0 + NNN
     pc = V[0]+decode(opcode, 0, 3);
 }
 void Emulator::RND (uint16_t opcode) {
-    // Vx = rand & NN
+    // CXNN Vx = rand & NN
 
     // random number generator
     static std::random_device randDevice;
@@ -351,7 +407,7 @@ void Emulator::RND (uint16_t opcode) {
 }
 
 void Emulator::DRW (uint16_t opcode) {
-    // opcode Dxyn, draw n-byte sprite starting at memory[I] to gfx [Vx, Vy]
+    // DXYN draw n-byte sprite starting at memory[I] to gfx [Vx, Vy]
 
     static const unsigned short SPRITE_WIDTH = 8;
     
@@ -367,12 +423,12 @@ void Emulator::DRW (uint16_t opcode) {
     for (unsigned short i = 0, spriteHeight = decode(opcode, 0); i < spriteHeight ; ++i) {
         for (unsigned short j = 0; j < SPRITE_WIDTH; ++j) {
             if ((x + j < SCREEN_WIDTH) && (y + i < SCREEN_HEIGHT)) {  // sprites drawn partially off-screen are clipped
-                addr = startAddr + i*SCREEN_WIDTH - j;  //
+                addr = startAddr + i*SCREEN_WIDTH + j;  //
 
                 // each memory[I+i] byte holds ON/OFF information for 8 pixels. To retrieve
-                // each at a time, must AND with value at current pixel then shift to the right to
-                // retrieve 0 or 1.
-                currPixel = (memory[I+i] & ((uint8_t) std::pow(2, j))) >> j;
+                // each at a time, must AND with value at current pixel (read left-to-right)
+                // then shift to the right to retrieve 0 or 1.
+                currPixel = (memory[I+i] & ((uint8_t) std::pow(2, SPRITE_WIDTH-j-1))) >> (SPRITE_WIDTH-j-1);
                 // printf("%hhu", currPixel);
                 if (gfx[addr] && currPixel) { // if collision, V[F] = 1
                     V[0xF] = 1;
@@ -383,26 +439,14 @@ void Emulator::DRW (uint16_t opcode) {
         }
     }
 
-    for (int i = 0, n = SCREEN_HEIGHT*SCREEN_WIDTH; i < n; ++i) {
-        if (gfx[i] == 0) {
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        }
-        else {
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        }
-        // printf("%hhu", gfx[i]);
-
-        SDL_RenderDrawPoint(renderer, i%SCREEN_WIDTH, std::floor(i/SCREEN_WIDTH));
-    }
-
-    SDL_RenderPresent(renderer);
+    refreshDisplay();
 
     pc += 2;
 }
 void Emulator::handleE (uint16_t opcode) {
     switch (decode(opcode, 0, 2)) {
         case 0x9E:
-            // skip if key == Vx
+            // EX9E skip if key == Vx
             if (pressedKeys[decode(opcode, 2)] == 1) {
                 pc += 4;
             }
@@ -411,7 +455,7 @@ void Emulator::handleE (uint16_t opcode) {
             }
             break;
         case 0xA1:
-            // skip if key != Vx
+            // EXA1 skip if key != Vx
             if (pressedKeys[decode(opcode, 2)] != 1) {
                 pc += 4;
             }
@@ -428,10 +472,11 @@ void Emulator::handleF (uint16_t opcode) {
 
     switch (decode(opcode, 0, 2)) {
         case 0x07:
+            // FX07
             V[x] = delayTimer;
             break;
         case 0x0A:
-            // wait for key then store in Vx
+            // FX0A wait for key then store in Vx
             SDL_Event waitForKey;
             short keyVal;
 
@@ -443,7 +488,7 @@ void Emulator::handleF (uint16_t opcode) {
                     SDL_PushEvent(&waitForKey);
                     return;
                 }
-            } while (waitForKey.type != SDL_KEYDOWN \
+            } while (waitForKey.type != SDL_KEYDOWN
                     || (keyVal = char2hex(waitForKey.key.keysym.sym)) == -1);
             V[x] = keyVal;
 
@@ -453,28 +498,29 @@ void Emulator::handleF (uint16_t opcode) {
 
             break;
         case 0x15:
+            // FX15
             delayTimer = V[x];
             break;
         case 0x18:
+            // FX18
             soundTimer = V[x];
             break;
         case 0x1E:
-            // I += Vx
+            // FX1E I += Vx
             V[0xF] = ((I > 0xFF-V[x]) ? 1 : 0);   // check for overflow
             I += V[x];
             break;
         case 0x29:
-            // I = sprite location in memory for digit Vx. Since digit sprites are 5 bytes long
+            // FX29 I = sprite location in memory for digit Vx. Since digit sprites are 5 bytes long
             // and stored starting at 0, I = 5 * Vx
             I = 5*V[x];
             break;
         case 0x33: {
-            // store BCD representation of Vx into I, I+1, I+2
+            // FX33 store BCD representation of Vx into address at I, I+1, I+2
             uint8_t ones, tens, hundreds;
             uint16_t val = V[x];
             ones = val % 10;
-            val = val / 10;
-            tens = val % 10;
+            tens = (val/10) % 10;
             hundreds = val / 100;
             memory[I] = hundreds;
             memory[I+1] = tens;
@@ -482,12 +528,12 @@ void Emulator::handleF (uint16_t opcode) {
             break;
         }
         case 0x55:
-            // copy V0...Vx into memory[I]...memory[I+x]
+            // FX55 copy V0...Vx into memory[I]...memory[I+x]
             std::memcpy(memory+I, V, x+1);
             I += (x+1);
             break;
         case 0x65:
-            // copy memory[I]...memory[I+x] into V0...Vx
+            // FX65 copy memory[I]...memory[I+x] into V0...Vx
             std::memcpy(V, memory+I, x+1);
             I += (x+1);
             break;
