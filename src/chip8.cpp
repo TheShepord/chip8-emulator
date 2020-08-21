@@ -9,8 +9,13 @@
 #include <SDL2/SDL.h>
 
 #include "chip8.hpp"
+#include "clock.hpp"
 
-#define CHIP8_DEBUG
+// #define CHIP8_DEBUG
+
+
+#define FONT_HEIGHT 5   // length of each display-font character
+#define DELAY_FREQ 60  // in Hz, frequency of updates to soundTimer and delayTimer
 
 /* returns hex value between bytes instruction[i] and instruction[i-4*len],
 reading from LSB in Big-Endian */
@@ -53,7 +58,6 @@ Emulator::Emulator() :
     START (0x200),
     window (NULL),
     renderer (NULL),
-    texture (NULL),
     pressedKeys {0},
     gfx {0}
 {
@@ -165,67 +169,86 @@ bool Emulator::initDisplay() {
         }
         
     }
-
+    
     return success;
 }
 
 /* one chip-8 cycle. Gets keydown and quit events, handles opcodes, and decrements timers */
 bool Emulator::update () {
-    
-    // handling quit and keydown events
-    static SDL_Event event;
-    static bool clearKeysFlag = false;
 
-    if (clearKeysFlag) {
-        std::memset(pressedKeys, 0, sizeof(pressedKeys)/sizeof(pressedKeys[0]));
-        clearKeysFlag = false;
-    }
+    static Clock cycleClock;
+    static Clock delayClock;
 
-    while (SDL_PollEvent(&event) != 0) {
-        if (event.type == SDL_KEYDOWN) {
-            short keyVal = char2hex(event.key.keysym.sym);
-            if (keyVal != -1) {
-                pressedKeys[char2hex(event.key.keysym.sym)] = 1;
-                clearKeysFlag = true;
+    static int cycleFreq = 500;
 
-                #ifdef CHIP8_DEBUG
-                    printf("key:%i\n",keyVal);
-                #endif
+    if (cycleClock.cycleElapsed(cycleFreq)) {
+        cycleClock.reset();
+
+        // handling quit and keydown events
+        static SDL_Event event;
+        while (SDL_PollEvent(&event) != 0) {
+            switch (event.type) {
+                case SDL_KEYDOWN: {
+                    short keyVal = char2hex(event.key.keysym.sym);
+                    if (keyVal != -1) {  // if key between 0 and F
+                        pressedKeys[keyVal] = 1;
+                        #ifdef CHIP8_DEBUG
+                            printf("key:%i\n",keyVal);
+                        #endif
+                    }
+                    #ifdef CHIP8_DEBUG
+                        switch (event.key.keysym.sym) {
+                            case SDLK_UP:
+                                cycleFreq += 100;
+                                break;
+                            case SDLK_DOWN:
+                                cycleFreq -= 100;
+                                break;
+                        }
+                    #endif
+                    break;
+                }
+                case SDL_KEYUP: {
+                    short keyVal = char2hex(event.key.keysym.sym);
+                    if (keyVal != -1) {
+                        pressedKeys[keyVal] = 0;
+                    }
+                    break;
+                }
+                case SDL_QUIT:
+                    return false;
             }
+
         }
-        else if (event.type == SDL_QUIT) {
+
+        static uint16_t opcode;
+
+        opcode = (memory[pc] << 8) | memory[pc+1];  // fetch
+
+        try {
+            #ifdef CHIP8_DEBUG
+                printf("opcode:%04X, pc:%i\n", opcode, pc);
+            #endif
+
+            (this->*optable[decode(opcode, 3)])(opcode);   // decode and execute
+            // equivalent to std::invoke(optable[decode(opcode, 3)], this, opcode), but faster
+            
+            pc += 2;
+        }
+        catch (char *e) {
+            printf("Opcode %04X at byte %i\n returned exception %s", opcode, pc - 0x200, e);
             return false;
         }
+        catch (int e) {
+            printf("Opcode %04X at byte %i\n returned exception %i", opcode, pc - 0x200, e);
+            return false;
+        }
+
     }
 
-    static uint16_t opcode;
-    static int cycle = 0;
-    static const int CYCLE_PER_FRAME = 60; // CPU 500Hz, timers 60Hz
-
-    opcode = (memory[pc] << 8) | memory[pc+1];  // fetch
-
-    try {
-        #ifdef CHIP8_DEBUG
-            printf("opcode:%04X, pc:%i\n", opcode, pc);
-        #endif
-
-        (this->*optable[decode(opcode, 3)])(opcode);   // decode and execute
-        // equivalent to std::invoke(optable[decode(opcode, 3)], this, opcode), but faster
-    }
-    catch (char *e) {
-        printf("Opcode %04X at byte %i\n returned exception %s", opcode, pc - 0x200, e);
-        return false;
-    }
-    catch (int e) {
-        printf("Opcode %04X at byte %i\n returned exception %i", opcode, pc - 0x200, e);
-        return false;
-    }
-
-    ++cycle;
-
-    if (cycle >= CYCLE_PER_FRAME) {
-        cycle = 0;
-
+    if (delayClock.cycleElapsed(DELAY_FREQ)) {
+        delayClock.reset();
+        
         if (delayTimer > 0) {
             --delayTimer;
         }
@@ -233,15 +256,16 @@ bool Emulator::update () {
         if (soundTimer > 0) {
             --soundTimer;
         }
-    }
 
-    
+    }
     return true;
 }
 
 /* updates display with current gfx */
 void Emulator::refreshDisplay() {
-    for (int i = 0, n = SCREEN_HEIGHT*SCREEN_WIDTH; i < n; ++i) {
+    static const int n = SCREEN_HEIGHT*SCREEN_WIDTH;
+
+    for (int i = 0; i < n; ++i) {
         if (gfx[i] == 0) {
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         }
@@ -249,7 +273,7 @@ void Emulator::refreshDisplay() {
             SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         }
 
-        SDL_RenderDrawPoint(renderer, i%SCREEN_WIDTH, std::floor(i/SCREEN_WIDTH));
+        SDL_RenderDrawPoint(renderer, i%SCREEN_WIDTH, i/SCREEN_WIDTH);
     }
 
     SDL_RenderPresent(renderer);
@@ -262,60 +286,50 @@ void Emulator::handle0(uint16_t opcode) {
         case 0x00E0:
             // 00E0 clear display;
             std::memset(gfx, 0, sizeof(gfx)/sizeof(gfx[0]));
-            refreshDisplay();
+            this->refreshDisplay();
 
-            pc += 2;
             break;
         case 0x00EE:
             // 00EE subroutine return
+            pc = stack[sptr];
             --sptr;
-            pc = stack[sptr] + 2;
             break;
         default:
+        // NOTE: 0NNN was part of the original CHIP-8 instruction set but is now deprecated
             throw std::invalid_argument("Unknown opcode.");
     }
 }
 void Emulator::JMP (uint16_t opcode) {
     // 1NNN jump to NNN
-    pc = decode(opcode, 0, 3);
+    pc = decode(opcode, 0, 3) - 2;
 }
 void Emulator::CALL (uint16_t opcode) {
     // 2NNN jump to subroutine at NNN
-    stack[sptr] = pc;
     ++sptr;
-    pc = decode(opcode, 0, 3);
+    stack[sptr] = pc;
+    pc = decode(opcode, 0, 3) - 2;
 }
 void Emulator::SEQ_BYTE (uint16_t opcode) {
     // 3XNN skip Vx == NN
     if (V[decode(opcode, 2)] == decode(opcode, 0, 2)) {
-        pc += 4;
-    }
-    else {
         pc += 2;
     }
 }
 void Emulator::SNE_BYTE (uint16_t opcode) {
     // 4XNN skip Vx != NN
     if (V[decode(opcode, 2)] != decode(opcode, 0, 2)) {
-        pc += 4;
-    }
-    else {
         pc += 2;
     }
 }
 void Emulator::SEQ (uint16_t opcode) {
     // 5XY0 skip Vx == Vy
     if (V[decode(opcode, 2)] == V[decode(opcode, 1)]) {
-        pc += 4;
-    }
-    else {
         pc += 2;
     }
 }
 void Emulator::LD (uint16_t opcode) {
     // 6XNN Vx = NN
     V[decode(opcode, 2)] = decode(opcode, 0, 2);
-    pc += 2;
 }
 void Emulator::ADD_BYTE (uint16_t opcode) {
     // 7XNN Vx += NN if not carry flag (i.e. if x != F)
@@ -323,7 +337,6 @@ void Emulator::ADD_BYTE (uint16_t opcode) {
     if (x != 0xF) {
         V[x] += decode(opcode, 0, 2);
     }
-    pc += 2;
 }
 void Emulator::handle8 (uint16_t opcode) {
     uint16_t x = decode(opcode, 2);
@@ -374,25 +387,20 @@ void Emulator::handle8 (uint16_t opcode) {
         default:
             throw std::invalid_argument("Unknown opcode.");
     }
-    pc += 2;
 }
 void Emulator::SNE (uint16_t opcode) {
     // 9XY0 skip Vx != Vy
     if (V[decode(opcode, 2)] != V[decode(opcode, 1)]) {
-        pc += 4;
-    }
-    else {
         pc += 2;
     }
 }
 void Emulator::LDI (uint16_t opcode) {
     // ANNN I = NNN
     I = decode(opcode, 0, 3);
-    pc += 2;
 }
 void Emulator::JPV0 (uint16_t opcode) {
     // BNNN jump to V0 + NNN
-    pc = V[0]+decode(opcode, 0, 3);
+    pc = V[0] + decode(opcode, 0, 3) - 2;
 }
 void Emulator::RND (uint16_t opcode) {
     // CXNN Vx = rand & NN
@@ -403,7 +411,6 @@ void Emulator::RND (uint16_t opcode) {
     static std::uniform_int_distribution<uint8_t> rng{0, 255};
 
     V[decode(opcode, 2)] = rng(randEngine) & decode(opcode, 0, 2);
-    pc += 2;
 }
 
 void Emulator::DRW (uint16_t opcode) {
@@ -439,27 +446,19 @@ void Emulator::DRW (uint16_t opcode) {
         }
     }
 
-    refreshDisplay();
-
-    pc += 2;
+    this->refreshDisplay();
 }
 void Emulator::handleE (uint16_t opcode) {
     switch (decode(opcode, 0, 2)) {
         case 0x9E:
             // EX9E skip if key == Vx
             if (pressedKeys[decode(opcode, 2)] == 1) {
-                pc += 4;
-            }
-            else {
                 pc += 2;
             }
             break;
         case 0xA1:
             // EXA1 skip if key != Vx
             if (pressedKeys[decode(opcode, 2)] != 1) {
-                pc += 4;
-            }
-            else {
                 pc += 2;
             }
             break;
@@ -491,7 +490,7 @@ void Emulator::handleF (uint16_t opcode) {
             } while (waitForKey.type != SDL_KEYDOWN
                     || (keyVal = char2hex(waitForKey.key.keysym.sym)) == -1);
             V[x] = keyVal;
-
+                
             #ifdef CHIP8_DEBUG
                 printf("waitKey:%i\n", keyVal);
             #endif
@@ -512,8 +511,8 @@ void Emulator::handleF (uint16_t opcode) {
             break;
         case 0x29:
             // FX29 I = sprite location in memory for digit Vx. Since digit sprites are 5 bytes long
-            // and stored starting at 0, I = 5 * Vx
-            I = 5*V[x];
+            // and stored starting at 0, FONT_HEIGHT = 5
+            I = FONT_HEIGHT*V[x];
             break;
         case 0x33: {
             // FX33 store BCD representation of Vx into address at I, I+1, I+2
@@ -540,6 +539,4 @@ void Emulator::handleF (uint16_t opcode) {
         default:
             throw std::invalid_argument("Unknown opcode.");
     }
-
-    pc += 2;
 }

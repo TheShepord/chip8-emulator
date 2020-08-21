@@ -1,10 +1,9 @@
+#ifndef CHIP8_H
+#define CHIP8_H
+
 #include <inttypes.h>
 #include <random>
 #include <SDL2/SDL.h>
-
-
-#ifndef CHIP8_H
-#define CHIP8_H
 
 unsigned short decode(uint16_t opcode, int index, int len);
 
@@ -36,7 +35,6 @@ class Emulator {
         // components for SDL graphics and event handling
         SDL_Window *window;
         SDL_Renderer *renderer;
-        SDL_Texture *texture;
         uint8_t pressedKeys[16];  // for chip-8's 16 keys. stores 0 if key isn't down, 1 if key is down
 
         // table of opcode functions

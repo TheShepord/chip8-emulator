@@ -150,6 +150,33 @@ src/chip8.cpp.s:
 	$(MAKE) -f CMakeFiles/Chip8_Emulator.dir/build.make CMakeFiles/Chip8_Emulator.dir/src/chip8.cpp.s
 .PHONY : src/chip8.cpp.s
 
+src/clock.o: src/clock.cpp.o
+
+.PHONY : src/clock.o
+
+# target to build an object file
+src/clock.cpp.o:
+	$(MAKE) -f CMakeFiles/Chip8_Emulator.dir/build.make CMakeFiles/Chip8_Emulator.dir/src/clock.cpp.o
+.PHONY : src/clock.cpp.o
+
+src/clock.i: src/clock.cpp.i
+
+.PHONY : src/clock.i
+
+# target to preprocess a source file
+src/clock.cpp.i:
+	$(MAKE) -f CMakeFiles/Chip8_Emulator.dir/build.make CMakeFiles/Chip8_Emulator.dir/src/clock.cpp.i
+.PHONY : src/clock.cpp.i
+
+src/clock.s: src/clock.cpp.s
+
+.PHONY : src/clock.s
+
+# target to generate assembly for a file
+src/clock.cpp.s:
+	$(MAKE) -f CMakeFiles/Chip8_Emulator.dir/build.make CMakeFiles/Chip8_Emulator.dir/src/clock.cpp.s
+.PHONY : src/clock.cpp.s
+
 src/main.o: src/main.cpp.o
 
 .PHONY : src/main.o
@@ -189,6 +216,9 @@ help:
 	@echo "... src/chip8.o"
 	@echo "... src/chip8.i"
 	@echo "... src/chip8.s"
+	@echo "... src/clock.o"
+	@echo "... src/clock.i"
+	@echo "... src/clock.s"
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
