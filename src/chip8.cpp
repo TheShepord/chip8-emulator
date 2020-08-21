@@ -23,18 +23,30 @@ uint16_t decode(uint16_t instruction, int index, int len=1) {
     return (instruction >> (4*index)) & ((int) (std::pow(0x10, len) - 1));
 }
 
-/* returns hex value of char 'c', for 'c' digit or lowercase a-f */
-short char2hex (char c) {
-    short res = -1;
-    if (c >= '0' && c <= '9') {
-        res = c - '0';
-    }
-    else if (c >= 'a' && c <= 'f') {
-        res = c - 'a' + 0xA;
-    }
+/* returns CHIP-8 keyboard equivalent of 'keyPress', or -1 if not part of CHIP-8 keyboard */
+short remapKey (char keyPress) {
+    switch (keyPress) {                   //  ORIGINAL KEYPAD:
+        case '1': return 1;        //     +---+---+---+---+
+        case '2': return 2;        //     | 1 | 2 | 3 | C |
+        case '3': return 3;        //     +---+---+---+---+
+        case '4': return 0xC;      //     | 4 | 5 | 6 | D |
+        case 'q': return 4;        //     +---+---+---+---+
+        case 'w': return 5;        //     | 7 | 8 | 9 | E |
+        case 'e': return 6;        //     +---+---+---+---+
+        case 'r': return 0xD;      //     | A | 0 | B | F |
+        case 'a': return 7;        //     +---+---+---+---+
+        case 's': return 8;
+        case 'd': return 9;        // EMULATOR KEYPAD:
+        case 'f': return 0xE;      //     +---+---+---+---+
+        case 'z': return 0xA;      //     | 1 | 2 | 3 | 4 |
+        case 'x': return 0;        //     +---+---+---+---+
+        case 'c': return 0xB;      //     | Q | W | E | R |
+        case 'v': return 0xF;      //     +---+---+---+---+
+        default: return -1;        //     | A | S | D | F |
+    }                              //     +---+---+---+---+
+}                                  //    | Z | X | C | D |
+                                   //     +---+---+---+---+
 
-    return res;
-}
 
 Emulator::Emulator() :
     optable {
@@ -173,7 +185,7 @@ bool Emulator::initDisplay() {
     return success;
 }
 
-/* one chip-8 cycle. Gets keydown and quit events, handles opcodes, and decrements timers */
+/* One chip-8 cycle. Gets keydown and quit events, handles opcodes, and decrements timers */
 bool Emulator::update () {
 
     static Clock cycleClock;
@@ -189,7 +201,8 @@ bool Emulator::update () {
         while (SDL_PollEvent(&event) != 0) {
             switch (event.type) {
                 case SDL_KEYDOWN: {
-                    short keyVal = char2hex(event.key.keysym.sym);
+                    short keyVal = remapKey(event.key.keysym.sym);
+                    printf("%i\n",keyVal);
                     if (keyVal != -1) {  // if key between 0 and F
                         pressedKeys[keyVal] = 1;
                         #ifdef CHIP8_DEBUG
@@ -209,7 +222,7 @@ bool Emulator::update () {
                     break;
                 }
                 case SDL_KEYUP: {
-                    short keyVal = char2hex(event.key.keysym.sym);
+                    short keyVal = remapKey(event.key.keysym.sym);
                     if (keyVal != -1) {
                         pressedKeys[keyVal] = 0;
                     }
@@ -255,6 +268,10 @@ bool Emulator::update () {
 
         if (soundTimer > 0) {
             --soundTimer;
+
+            if (soundTimer > 0) {  // CHIP-8 plays sound if soundTimer > 1 (i.e. > 0 after decrement)
+                printf("\a");
+            }
         }
 
     }
@@ -279,6 +296,15 @@ void Emulator::refreshDisplay() {
     SDL_RenderPresent(renderer);
 }
 
+
+
+
+
+
+
+// ===============================================
+//                  OPCODES
+// ===============================================
 
 
 void Emulator::handle0(uint16_t opcode) {
@@ -436,11 +462,11 @@ void Emulator::DRW (uint16_t opcode) {
                 // each at a time, must AND with value at current pixel (read left-to-right)
                 // then shift to the right to retrieve 0 or 1.
                 currPixel = (memory[I+i] & ((uint8_t) std::pow(2, SPRITE_WIDTH-j-1))) >> (SPRITE_WIDTH-j-1);
-                // printf("%hhu", currPixel);
+
                 if (gfx[addr] && currPixel) { // if collision, V[F] = 1
                     V[0xF] = 1;
                 }
-                // To update gfx, XOR currPixel with corresponding gfx location
+                // CHIP-8 updates gfx by XORing currPixel with corresponding gfx location
                 gfx[addr] ^= currPixel;
             }
         }
@@ -452,13 +478,13 @@ void Emulator::handleE (uint16_t opcode) {
     switch (decode(opcode, 0, 2)) {
         case 0x9E:
             // EX9E skip if key == Vx
-            if (pressedKeys[decode(opcode, 2)] == 1) {
+            if (pressedKeys[V[decode(opcode, 2)]] == 1) {
                 pc += 2;
             }
             break;
         case 0xA1:
             // EXA1 skip if key != Vx
-            if (pressedKeys[decode(opcode, 2)] != 1) {
+            if (pressedKeys[V[decode(opcode, 2)]] != 1) {
                 pc += 2;
             }
             break;
@@ -488,7 +514,7 @@ void Emulator::handleF (uint16_t opcode) {
                     return;
                 }
             } while (waitForKey.type != SDL_KEYDOWN
-                    || (keyVal = char2hex(waitForKey.key.keysym.sym)) == -1);
+                    || (keyVal = remapKey(waitForKey.key.keysym.sym)) == -1);
             V[x] = keyVal;
                 
             #ifdef CHIP8_DEBUG
