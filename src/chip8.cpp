@@ -11,7 +11,7 @@
 #include "chip8.hpp"
 #include "clock.hpp"
 
-#define CHIP8_DEBUG
+// #define CHIP8_DEBUG
 
 
 #define FONT_HEIGHT 5   // length of each display-font character
@@ -192,7 +192,7 @@ bool Emulator::update () {
     static Clock delayClock;
 
     static int cycleFreq = 500;
-
+    
     if (cycleClock.cycleElapsed(cycleFreq)) {
         cycleClock.reset();
 
@@ -202,7 +202,6 @@ bool Emulator::update () {
             switch (event.type) {
                 case SDL_KEYDOWN: {
                     short keyVal = remapKey(event.key.keysym.sym);
-                    printf("%i\n",keyVal);
                     if (keyVal != -1) {  // if key between 0 and F
                         pressedKeys[keyVal] = 1;
                         #ifdef CHIP8_DEBUG
@@ -319,7 +318,6 @@ void Emulator::handle0(uint16_t opcode) {
             // 00E0 clear display;
             std::memset(gfx, 0, sizeof(gfx)/sizeof(gfx[0]));
             this->refreshDisplay();
-
             break;
         case 0x00EE:
             // 00EE subroutine return
@@ -333,13 +331,13 @@ void Emulator::handle0(uint16_t opcode) {
 }
 void Emulator::JMP (uint16_t opcode) {
     // 1NNN jump to NNN
-    pc = decode(opcode, 0, 3) - 2;
+    pc = decode(opcode, 0, 3) - 2;  // -2 because pc automatically increments by +2 every cycle
 }
 void Emulator::CALL (uint16_t opcode) {
     // 2NNN jump to subroutine at NNN
     ++sptr;
     stack[sptr] = pc;
-    pc = decode(opcode, 0, 3) - 2;
+    pc = decode(opcode, 0, 3) - 2;  // -2 because pc automatically increments by +2 every cycle
 }
 void Emulator::SEQ_BYTE (uint16_t opcode) {
     // 3XNN skip Vx == NN
@@ -364,11 +362,8 @@ void Emulator::LD (uint16_t opcode) {
     V[decode(opcode, 2)] = decode(opcode, 0, 2);
 }
 void Emulator::ADD_BYTE (uint16_t opcode) {
-    // 7XNN Vx += NN if not carry flag (i.e. if x != F)
-    uint16_t x = decode(opcode, 2);
-    if (x != 0xF) {
-        V[x] += decode(opcode, 0, 2);
-    }
+    // 7XNN Vx += NN, taking NN % 0x100
+    V[decode(opcode, 2)] += (decode(opcode, 0, 2) % 0x100);
 }
 void Emulator::handle8 (uint16_t opcode) {
     uint16_t x = decode(opcode, 2);
@@ -393,27 +388,27 @@ void Emulator::handle8 (uint16_t opcode) {
             break;
         case 4:
             // 8XY4
-            V[0xF] = ((V[x] > 0xFF-V[y]) ? 1 : 0);    // check for overflow
+            V[0xF] = ((V[x] > 0xFF-V[y]) ? 1 : 0);  // 1 if carry occurs, else 0
             V[x] += V[y];
             break;
         case 5:
             // 8XY5
-            V[0xF] = ((V[x] >= V[y]) ? 1 : 0);    // check for overflow
+            V[0xF] = ((V[x] >= V[y]) ? 1 : 0);  // 0 if borrow occurs, else 1
             V[x] -= V[y];
             break;
         case 6:
-            // 8X06 shift right
-            V[0xF] = (V[x] & 1);  // get LSB
+            // 8XY6
+            V[0xF] = (V[y] & 1);  // get LSB
             V[x] = (V[x] >> 1);
             break;
         case 7:
             // 8XY7
-            V[0xF] = ((V[y] >= V[x]) ? 1 : 0);    // check for overflow
+            V[0xF] = ((V[y] >= V[x]) ? 1 : 0);  // 0 if borrow occurs, else 1
             V[x] = V[y] - V[x];
             break;
         case 0xE:
-            // 8X0E shift left
-            V[0xF] = (V[x] >> 15);  // get MSB
+            // 8XYE
+            V[0xF] = (V[y] >> 15);  // get MSB
             V[x] = (V[x] << 1);
             break;
         default:
@@ -440,7 +435,7 @@ void Emulator::RND (uint16_t opcode) {
     // random number generator
     static std::random_device randDevice;
     static std::mt19937 randEngine{randDevice()};
-    static std::uniform_int_distribution<uint8_t> rng{0, 255};
+    static std::uniform_int_distribution<uint8_t> rng{0, 0xFF};
 
     V[decode(opcode, 2)] = rng(randEngine) & decode(opcode, 0, 2);
 }
@@ -449,34 +444,46 @@ void Emulator::DRW (uint16_t opcode) {
     // DXYN draw n-byte sprite starting at memory[I] to gfx [Vx, Vy]
 
     static const unsigned short SPRITE_WIDTH = 8;
-    
-    unsigned short x = decode(opcode,2);
-    unsigned short y = decode(opcode,1);
+
+
+    unsigned short spriteHeight = decode(opcode, 0);
+
+    unsigned short x = decode(opcode, 2);
+    unsigned short y = decode(opcode, 1);
+    // unsigned short xCoord = ((V[decode(opcode,2)]+SPRITE_WIDTH) % SCREEN_WIDTH - SPRITE_WIDTH;
+    // unsigned short yCoord = (V[decode(opcode,1)]+spriteHeight) % SCREEN_HEIGHT - spriteHeight;
 
     // since gfx stored row-wise, starting addr is Vy * SCREEN_WIDTH + Vx.
     // Modulos allow for wrap-around in case the entire sprite goes offscreen
-    int startAddr = (V[y] % SCREEN_HEIGHT) * SCREEN_WIDTH + (V[x] % SCREEN_WIDTH);
+    // int startAddr = (V[y] % SCREEN_HEIGHT) * SCREEN_WIDTH + (V[x] % SCREEN_WIDTH);
     int addr;
 
     uint8_t currPixel;
+    bool collisionFlag = false;
 
-    for (unsigned short i = 0, spriteHeight = decode(opcode, 0); i < spriteHeight ; ++i) {
-        for (unsigned short j = 0; j < SPRITE_WIDTH; ++j) {
-            if ((V[x] + j < SCREEN_WIDTH) && (V[y] + i < SCREEN_HEIGHT)) {  // sprites drawn partially off-screen are clipped
-                addr = startAddr + i*SCREEN_WIDTH + j;
+    for (unsigned short row = 0; row < spriteHeight ; ++row) {
+        for (unsigned short col = 0; col < SPRITE_WIDTH; ++col) {
+            // if ((V[x] + col < SCREEN_WIDTH) && (V[y] + row < SCREEN_HEIGHT)) {  // sprites drawn partially off-screen are clipped
+                addr = ((V[y] + row) % SCREEN_HEIGHT) * SCREEN_WIDTH + ((V[x] + col) % SCREEN_WIDTH);
 
-                // each memory[I+i] byte holds ON/OFF information for 8 pixels. To retrieve
+                // each memory[I+row] byte holds ON/OFF information for 8 pixels. To retrieve
                 // each at a time, must AND with value at current pixel (read left-to-right)
                 // then shift to the right to retrieve 0 or 1.
-                currPixel = (memory[I+i] & ((uint8_t) std::pow(2, SPRITE_WIDTH-j-1))) >> (SPRITE_WIDTH-j-1);
+                currPixel = (memory[I+row] & ((uint8_t) std::pow(2, SPRITE_WIDTH-col-1))) \
+                            >> (SPRITE_WIDTH-col-1);
 
-                if (gfx[addr] && currPixel) { // if collision, V[F] = 1
+                if (gfx[addr] & currPixel) { // if collision, V[F] = 1
+                    collisionFlag = true;
                     V[0xF] = 1;
                 }
                 // CHIP-8 updates gfx by XORing currPixel with corresponding gfx location
                 gfx[addr] ^= currPixel;
-            }
+            // }
         }
+    }
+
+    if (! collisionFlag) {
+        V[0xF] = 0;
     }
 
     this->refreshDisplay();
@@ -538,8 +545,7 @@ void Emulator::handleF (uint16_t opcode) {
             soundTimer = V[x];
             break;
         case 0x1E:
-            // FX1E I += Vx
-            V[0xF] = ((I > 0xFF-V[x]) ? 1 : 0);   // check for overflow
+            // FX1E
             I += V[x];
             break;
         case 0x29:
