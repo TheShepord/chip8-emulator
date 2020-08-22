@@ -11,7 +11,7 @@
 #include "chip8.hpp"
 #include "clock.hpp"
 
-// #define CHIP8_DEBUG
+#define CHIP8_DEBUG
 
 
 #define FONT_HEIGHT 5   // length of each display-font character
@@ -25,7 +25,7 @@ uint16_t decode(uint16_t instruction, int index, int len=1) {
 
 /* returns CHIP-8 keyboard equivalent of 'keyPress', or -1 if not part of CHIP-8 keyboard */
 short remapKey (char keyPress) {
-    switch (keyPress) {                   //  ORIGINAL KEYPAD:
+    switch (keyPress) {            //  ORIGINAL KEYPAD:
         case '1': return 1;        //     +---+---+---+---+
         case '2': return 2;        //     | 1 | 2 | 3 | C |
         case '3': return 3;        //     +---+---+---+---+
@@ -160,8 +160,8 @@ bool Emulator::initDisplay() {
             "Chip-8 Emulator",
             SDL_WINDOWPOS_CENTERED,
             SDL_WINDOWPOS_CENTERED,
-            SCREEN_WIDTH,
-            SCREEN_HEIGHT,
+            SCREEN_WIDTH*SCREEN_SCALE,
+            SCREEN_HEIGHT*SCREEN_SCALE,
             SDL_WINDOW_SHOWN |
             SDL_WINDOW_ALLOW_HIGHDPI);
             //SDL_WINDOW_RESIZABLE);
@@ -281,7 +281,7 @@ bool Emulator::update () {
 /* updates display with current gfx */
 void Emulator::refreshDisplay() {
     static const int n = SCREEN_HEIGHT*SCREEN_WIDTH;
-
+    
     for (int i = 0; i < n; ++i) {
         if (gfx[i] == 0) {
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
@@ -290,7 +290,13 @@ void Emulator::refreshDisplay() {
             SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         }
 
-        SDL_RenderDrawPoint(renderer, i%SCREEN_WIDTH, i/SCREEN_WIDTH);
+        SDL_Rect rect = {
+                    (i%SCREEN_WIDTH)*SCREEN_SCALE,  // x
+                    (i/SCREEN_WIDTH)*SCREEN_SCALE,  // y
+                    SCREEN_SCALE, // w
+                    SCREEN_SCALE  //h
+        };
+        SDL_RenderFillRect(renderer, &rect);
     }
 
     SDL_RenderPresent(renderer);
@@ -444,19 +450,20 @@ void Emulator::DRW (uint16_t opcode) {
 
     static const unsigned short SPRITE_WIDTH = 8;
     
-    unsigned short x = decode(opcode,2) % SCREEN_WIDTH;  // modulos allows wrap-around
-    unsigned short y = decode(opcode,1) % SCREEN_HEIGHT;
+    unsigned short x = decode(opcode,2);
+    unsigned short y = decode(opcode,1);
 
     // since gfx stored row-wise, starting addr is Vy * SCREEN_WIDTH + Vx.
-    int startAddr = V[y] * SCREEN_WIDTH + V[x];
+    // Modulos allow for wrap-around in case the entire sprite goes offscreen
+    int startAddr = (V[y] % SCREEN_HEIGHT) * SCREEN_WIDTH + (V[x] % SCREEN_WIDTH);
     int addr;
 
     uint8_t currPixel;
 
     for (unsigned short i = 0, spriteHeight = decode(opcode, 0); i < spriteHeight ; ++i) {
         for (unsigned short j = 0; j < SPRITE_WIDTH; ++j) {
-            if ((x + j < SCREEN_WIDTH) && (y + i < SCREEN_HEIGHT)) {  // sprites drawn partially off-screen are clipped
-                addr = startAddr + i*SCREEN_WIDTH + j;  //
+            if ((V[x] + j < SCREEN_WIDTH) && (V[y] + i < SCREEN_HEIGHT)) {  // sprites drawn partially off-screen are clipped
+                addr = startAddr + i*SCREEN_WIDTH + j;
 
                 // each memory[I+i] byte holds ON/OFF information for 8 pixels. To retrieve
                 // each at a time, must AND with value at current pixel (read left-to-right)

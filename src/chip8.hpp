@@ -31,6 +31,7 @@ class Emulator {
         static const int SCREEN_WIDTH = 64;
         static const int SCREEN_HEIGHT = 32;
         uint8_t gfx[SCREEN_WIDTH * SCREEN_HEIGHT]; // stored row-wise
+        int SCREEN_SCALE = 10;
 
         // components for SDL graphics and event handling
         SDL_Window *window;
