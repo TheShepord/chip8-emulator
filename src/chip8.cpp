@@ -6,7 +6,8 @@
 #include <stdexcept>
 #include <random>
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
+#include <QWidget>
 
 #include "chip8.hpp"
 #include "clock.hpp"
