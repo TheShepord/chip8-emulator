@@ -1,11 +1,11 @@
 # chip8-emulator
 [![Github license](https://img.shields.io/github/license/mashape/apistatus.svg?style=flat-square)](https://github.com/TheShepord/chip8-emulator/blob/master/LICENSE)
 
-Cross-platform emulator for the original CHIP-8 Virtual Machine. Written in C++, with SDL2 for rendering and UI.
+Cross-platform emulator for the original CHIP-8 Virtual Machine. Written in C++, with SDL2 for rendering and UI. Supports all 35 original opcodes, audio playback and custom settings.
 
 ![Playing pong!](https://github.com/TheShepord/chip8-emulator/blob/master/docs/images/playing-pong.gif)
 
-*Yes, the flickering is characteristic of the CHIP-8 but can be reduced by increasing clock cyles, press `up-arrow` to do so.*
+*Yes, the flickering is characteristic of the CHIP-8 but can be reduced by increasing clock cyles, press `Up Arrow` to do so.*
 
 ## Compatibility
 Verified-compatible with Windows and Ubuntu 18.04 LTS, should compile in any operating system with [SDL2](https://www.libsdl.org/download-2.0.php) installed.
@@ -47,6 +47,12 @@ Run
 `Up Arrow`: increase CPU clock frequency  
 `Down Arrow`: decrease CPU clock frequency  
 `M`: mute sound  
+
+## Upcoming Features
+
+* Wrap SDL2 window inside Qt5 widget for better customization features
+* Improve audio fidelity through another form of playback
+* Disassembler and more robust debugging features
 
 
 ## About
