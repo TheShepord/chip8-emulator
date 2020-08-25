@@ -9,6 +9,7 @@ class Clock {
     public:
         Clock();
         void reset();
+        void rewind();
         void compensateCycle(uint32_t freq);
         bool cycleElapsed(uint32_t freq);
     private:

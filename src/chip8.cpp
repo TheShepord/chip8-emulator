@@ -249,13 +249,13 @@ bool Emulator::update () {
                         case SDLK_m:  // mute sound
                             soundFlag = !soundFlag;
                             break;
-                        case SDLK_p:  // pause the emulator
+                        case SDLK_SPACE:  // pause the emulator
                             SDL_Event unpause;
 
                             SDL_WaitEvent(&unpause);
-
+                            
                             while (unpause.type != SDL_KEYDOWN ||
-                                  unpause.key.keysym.sym != SDLK_p)
+                                  unpause.key.keysym.sym != SDLK_SPACE)
                             {
                                 SDL_PushEvent(&unpause);
 
@@ -265,6 +265,9 @@ bool Emulator::update () {
                                 SDL_WaitEvent(&unpause);
 
                             }
+                            cycleClock.rewind();
+                            delayClock.rewind();
+
                             break;
                     }
                     break;

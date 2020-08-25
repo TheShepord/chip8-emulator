@@ -26,6 +26,10 @@ void Clock::reset() {
     startTime = high_resolution_clock::now();
 }
 
+void Clock::rewind() {
+    startTime = endTime;
+}
+
 bool Clock::cycleElapsed(uint32_t freq) {
     endTime = high_resolution_clock::now();
 
