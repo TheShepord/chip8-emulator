@@ -12,16 +12,16 @@ Verified-compatible with Windows and Ubuntu 18.04 LTS, should compile in any ope
 
 ## Usage
 
-Compile using CMake
-`$ cd <path of project install>`
-`$ cmake .`
-`$ cmake --build .`
+Compile using CMake  
+`$ cd <path of project install>`  
+`$ cmake .`  
+`$ cmake --build .`  
 
-Compile using GNU Make:
-`$ cd <path of project install>`
-`$ make`
+Compile using GNU Make  
+`$ cd <path of project install>`  
+`$ make`  
 
-Run
+Run  
 `$ ./Chip8_Emulator roms/<ROM you'd like to play>`
 
 ### Keyboard Layout
@@ -43,10 +43,10 @@ Run
 | Z | X | C | V |
 
 ### Commands
-`Spacebar`: pause/resume Emulator
-`Up Arrow`: increase CPU clock frequency
-`Down Arrow`: decrease CPU clock frequency
-`M`: mute sound
+`Spacebar`: pause/resume Emulator  
+`Up Arrow`: increase CPU clock frequency  
+`Down Arrow`: decrease CPU clock frequency  
+`M`: mute sound  
 
 
 ## About
