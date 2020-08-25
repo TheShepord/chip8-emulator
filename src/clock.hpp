@@ -1,5 +1,5 @@
-#ifndef CLOCK_H
-#define CLOCK_H
+#ifndef _CHIP8_CLOCK_H
+#define _CHIP8_CLOCK_H
 
 #include <stdbool.h>
 #include <chrono>

@@ -1,5 +1,5 @@
-#ifndef CHIP8_H
-#define CHIP8_H
+#ifndef _CHIP8_H
+#define _CHIP8_H
 
 #include <inttypes.h>
 #include <random>
@@ -37,6 +37,7 @@ class Emulator {
         SDL_Window *window;
         SDL_Renderer *renderer;
         uint8_t pressedKeys[16];  // for chip-8's 16 keys. stores 0 if key isn't down, 1 if key is down
+        char *loadedRom;
 
         // table of opcode functions
         void (Emulator::*optable[16]) (uint16_t opcode);

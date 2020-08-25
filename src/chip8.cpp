@@ -7,10 +7,10 @@
 #include <random>
 
 #include <SDL.h>
-#include <QWidget>
 
 #include "chip8.hpp"
 #include "clock.hpp"
+#include "sound.hpp"
 
 // #define CHIP8_DEBUG
 
@@ -117,14 +117,15 @@ bool Emulator::loadROM (const char *rom) {
     FILE *fptr = NULL;
     bool success = true;
 
+
     if ((fptr = fopen(rom, "rb")) == NULL) {
-        printf("Failed to open %s. Does the file exist?\n", rom);
+        fprintf(stderr, "Failed to open %s. Does the file exist?\n", rom);
         success = false;
     }
     else {
         const char *ext = std::strrchr(rom, '.') + 1;
         if (std::strcmp("ch8", ext)) {
-            printf("Unsupported file extension %s, file should be of type .ch8\n", ext);
+            fprintf(stderr, "Unsupported file extension %s, file should be of type .ch8\n", ext);
             success = false;
         }
         else {
@@ -133,7 +134,7 @@ bool Emulator::loadROM (const char *rom) {
             rewind(fptr);
 
             if (fsize > sizeof(memory) - START) {
-                printf("Invalid .ch8 program. Size should be at most %i bytes, but is instead %i bytes.\n",\
+                fprintf(stderr, "Invalid .ch8 program. Size should be at most %i bytes, but is instead %i bytes.\n",\
                 (int) (sizeof(memory)-START), fsize);
                 success = false;
             }
@@ -144,16 +145,19 @@ bool Emulator::loadROM (const char *rom) {
 
         fclose(fptr);
     }
+
+    loadedRom = (char *) rom;
+
     return success;
 }
 
 /* initiate SDL and SDL window */
 bool Emulator::initDisplay() {
-
+    
     bool success = true;
-
-    if (SDL_Init(SDL_INIT_VIDEO) < 0 ) {
-        printf("SDL failed to initialize. SDL_Error: %s\n", SDL_GetError());
+    
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_NOPARACHUTE) < 0 ) {
+        fprintf(stderr, "SDL failed to initialize. SDL_Error: %s\n", SDL_GetError());
         success = false;
     }
     else {
@@ -168,7 +172,7 @@ bool Emulator::initDisplay() {
             //SDL_WINDOW_RESIZABLE);
         
         if (window == NULL) {
-            printf("Window failed to be created. SDL_Error: %s\n", SDL_GetError());
+            fprintf(stderr, "Window failed to be created. SDL_Error: %s\n", SDL_GetError());
             success = false;
         }
 
@@ -176,14 +180,22 @@ bool Emulator::initDisplay() {
             renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
             if (renderer == NULL) {
-                printf("Renderer failed to initialize. SDL_Error: %s\n", SDL_GetError());
+                fprintf(stderr, "Renderer failed to initialize. SDL_Error: %s\n", SDL_GetError());
                 success = false;
             }
         }
         
     }
     
+    SDL_SetWindowTitle(window, loadedRom);
     return success;
+}
+
+void playSound(uint8_t soundTimer) {
+    static double Hz = 440;
+    
+    static Beeper b;
+    b.beep(Hz, 1000/DELAY_FREQ);
 }
 
 /* One chip-8 cycle. Gets keydown and quit events, handles opcodes, and decrements timers */
@@ -193,7 +205,25 @@ bool Emulator::update () {
     static Clock delayClock;
 
     static int cycleFreq = 500;
-    
+    static bool soundFlag = true;
+
+    if (delayClock.cycleElapsed(DELAY_FREQ)) {
+        delayClock.reset();
+        
+        if (delayTimer > 0) {
+            --delayTimer;
+        }
+
+        if (soundTimer > 0) {
+            --soundTimer;
+
+            if ((soundTimer > 0) && soundFlag) {  // CHIP-8 plays sound if soundTimer > 1 (i.e. > 0 after decrement)
+                playSound(soundTimer);
+            }
+        }
+
+    }
+
     if (cycleClock.cycleElapsed(cycleFreq)) {
         cycleClock.reset();
 
@@ -209,16 +239,34 @@ bool Emulator::update () {
                             printf("key:%i\n",keyVal);
                         #endif
                     }
-                    #ifdef CHIP8_DEBUG
-                        switch (event.key.keysym.sym) {
-                            case SDLK_UP:
-                                cycleFreq += 100;
-                                break;
-                            case SDLK_DOWN:
-                                cycleFreq -= 100;
-                                break;
-                        }
-                    #endif
+                    switch (event.key.keysym.sym) {
+                        case SDLK_UP:  // // increase frequency between emulator cycles
+                            cycleFreq += 100;
+                            break;
+                        case SDLK_DOWN:  // decrease frequency between emulator cycles
+                            cycleFreq -= 100;
+                            break;
+                        case SDLK_m:  // mute sound
+                            soundFlag = !soundFlag;
+                            break;
+                        case SDLK_p:  // pause the emulator
+                            SDL_Event unpause;
+
+                            SDL_WaitEvent(&unpause);
+
+                            while (unpause.type != SDL_KEYDOWN ||
+                                  unpause.key.keysym.sym != SDLK_p)
+                            {
+                                SDL_PushEvent(&unpause);
+
+                                if (unpause.type == SDL_QUIT) {
+                                    return false;
+                                }
+                                SDL_WaitEvent(&unpause);
+
+                            }
+                            break;
+                    }
                     break;
                 }
                 case SDL_KEYUP: {
@@ -249,29 +297,12 @@ bool Emulator::update () {
             pc += 2;
         }
         catch (char *e) {
-            printf("Opcode %04X at byte %i\n returned exception %s", opcode, pc - 0x200, e);
+            fprintf(stderr, "Opcode %04X at byte %i\n returned exception %s", opcode, pc - 0x200, e);
             return false;
         }
         catch (int e) {
-            printf("Opcode %04X at byte %i\n returned exception %i", opcode, pc - 0x200, e);
+            fprintf(stderr, "Opcode %04X at byte %i\n returned exception %i", opcode, pc - 0x200, e);
             return false;
-        }
-
-    }
-
-    if (delayClock.cycleElapsed(DELAY_FREQ)) {
-        delayClock.reset();
-        
-        if (delayTimer > 0) {
-            --delayTimer;
-        }
-
-        if (soundTimer > 0) {
-            --soundTimer;
-
-            if (soundTimer > 0) {  // CHIP-8 plays sound if soundTimer > 1 (i.e. > 0 after decrement)
-                printf("\a");
-            }
         }
 
     }
@@ -520,16 +551,19 @@ void Emulator::handleF (uint16_t opcode) {
             SDL_Event waitForKey;
             short keyVal;
 
-            do {
-                SDL_WaitEvent(&waitForKey);
+            SDL_WaitEvent(&waitForKey);
+            while (waitForKey.type != SDL_KEYDOWN ||
+                  (keyVal = remapKey(waitForKey.key.keysym.sym)) == -1)
+            {
+                SDL_PushEvent(&waitForKey);
 
-                // handles attempting to close window while waiting for key
                 if (waitForKey.type == SDL_QUIT) {
-                    SDL_PushEvent(&waitForKey);
                     return;
                 }
-            } while (waitForKey.type != SDL_KEYDOWN
-                    || (keyVal = remapKey(waitForKey.key.keysym.sym)) == -1);
+                SDL_WaitEvent(&waitForKey);
+
+            }
+
             V[x] = keyVal;
                 
             #ifdef CHIP8_DEBUG
