@@ -3,7 +3,7 @@
 
 Cross-platform emulator for the original CHIP-8 Virtual Machine. Written in C++, with SDL2 for rendering and UI.
 
-[![Playing pong!](https://github.com/TheShepord/chip8-emulator/blob/master/docs/images/playing-pong.gif)] *Yes, the flickering is characteristic of the CHIP-8 but can be reduced by increasing clock cyles, press `up-arrow` to do so.*
+![Playing pong!](https://github.com/TheShepord/chip8-emulator/blob/master/docs/images/playing-pong.gif) *Yes, the flickering is characteristic of the CHIP-8 but can be reduced by increasing clock cyles, press `up-arrow` to do so.*
 
 ## Compatibility
 Verified-compatible with Windows and Ubuntu 18.04 LTS, should compile in any operating system with [SDL2](https://www.libsdl.org/download-2.0.php) installed.
