@@ -50,9 +50,9 @@ Run
 
 ## Upcoming Features
 
-* Wrap SDL2 window inside Qt5 widget for better customization features
-* Improve audio fidelity through another form of playback
-* Disassembler and more robust debugging features
+* Wrap SDL2 window inside Qt5 widget for better customization features  
+* Improve audio fidelity through another form of playback  
+* Disassembler and more robust debugging features  
 
 
 ## About
